@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in this repo's GitHub Issues using the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+This repo uses the default mattpocock/skills triage labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repo: read root `CONTEXT.md` and root `docs/adr/` when they exist. See `docs/agents/domain.md`.
+
 ## Project Overview
 
 Lite3 RL Deploy is a reinforcement learning policy deployment framework for the Lite3 quadruped robot. It supports both simulation (PyBullet, MuJoCo) and real hardware execution.
