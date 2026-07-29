@@ -37,9 +37,10 @@ private:
     std::unique_ptr<OrtImpl> ort_;
 
     std::string model_path_;
+    std::string metadata_path_;
 
-    const int obs_dim_ = 48;
-    const int act_dim_ = 12;
+    int obs_dim_ = 0;
+    int act_dim_ = 0;
 
     VecXf current_obs_;
     VecXf joint_pos_rl;

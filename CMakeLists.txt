@@ -5,6 +5,7 @@ project(rl_controller)
 set(CMAKE_BUILD_TYPE Release)
 add_definitions(-w) # warning ignore
 add_compile_options(-fPIC)
+include(CTest)
 
 # ========== 控制选项 ==========
 set(BUILD_PLATFORM "x86" CACHE STRING "select build cpu type")
@@ -141,6 +142,12 @@ if(USE_MOLD_LINKER)
 endif()
 
 # ========== run_policy 独立库 ==========
+add_library(policy_metadata STATIC run_policy/policy_metadata.cpp)
+target_include_directories(policy_metadata PUBLIC
+    run_policy
+    ${THIRD_PARTY}/eigen/
+)
+
 # Building the policy runner as a separate library means that editing the
 # policy implementation only recompiles this one translation unit and
 # re-links, without touching the state machine or main.cpp object files.
@@ -152,7 +159,7 @@ target_include_directories(run_policy PUBLIC
     types
     ${ONNX_RUNTIME_ROOT}/include
 )
-target_link_libraries(run_policy onnxruntime)
+target_link_libraries(run_policy policy_metadata onnxruntime)
 
 # ========== 收集源文件 ==========
 file(GLOB_RECURSE STATE_MACHINE_SRC "state_machine/*.c*")
@@ -204,4 +211,11 @@ if (SEND_REMOTE)
     WORKING_DIRECTORY ..
     COMMENT "run sftp_to_remote.sh"
   )
+endif()
+
+if (BUILD_TESTING)
+  add_executable(policy_metadata_test tests/policy_metadata_test.cpp)
+  target_include_directories(policy_metadata_test PRIVATE run_policy ${THIRD_PARTY}/eigen/)
+  target_link_libraries(policy_metadata_test policy_metadata)
+  add_test(NAME policy_metadata_test COMMAND policy_metadata_test)
 endif()

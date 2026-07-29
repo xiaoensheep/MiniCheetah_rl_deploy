@@ -15,6 +15,7 @@
 #include <onnxruntime_cxx_api.h>
 
 #include "basic_function.hpp"
+#include "policy_metadata.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -26,6 +27,17 @@ std::string ResolvePolicyPath() {
     const std::filesystem::path cwd = GetAbsPath();
     const std::filesystem::path from_project_root = cwd / "policy/ppo/policy.onnx";
     const std::filesystem::path from_build_dir = cwd / "../policy/ppo/policy.onnx";
+
+    if (std::filesystem::exists(from_project_root)) {
+        return from_project_root.lexically_normal().string();
+    }
+    return from_build_dir.lexically_normal().string();
+}
+
+std::string ResolvePolicyMetadataPath() {
+    const std::filesystem::path cwd = GetAbsPath();
+    const std::filesystem::path from_project_root = cwd / "policy/ppo/policy_metadata.json";
+    const std::filesystem::path from_build_dir = cwd / "../policy/ppo/policy_metadata.json";
 
     if (std::filesystem::exists(from_project_root)) {
         return from_project_root.lexically_normal().string();
@@ -64,7 +76,16 @@ MiniCheetahPolicyRunnerONNX::MiniCheetahPolicyRunnerONNX(std::string policy_name
       joint_vel_rl(12) {
 
     model_path_ = ResolvePolicyPath();
+    metadata_path_ = ResolvePolicyMetadataPath();
+    const PolicyMetadata metadata = LoadPolicyMetadata(metadata_path_);
+    obs_dim_ = metadata.obs_dim;
+    act_dim_ = metadata.action_dim;
+    if (act_dim_ != 12) {
+        throw std::runtime_error("MiniCheetahPolicyRunnerONNX requires a 12-dim action policy");
+    }
+
     std::cout << "[ONNX INIT] Loading model: " << model_path_ << std::endl;
+    std::cout << "[ONNX INIT] Loading metadata: " << metadata_path_ << std::endl;
 
     ort_->session_options.SetIntraOpNumThreads(1);
     ort_->session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
@@ -80,33 +101,18 @@ MiniCheetahPolicyRunnerONNX::MiniCheetahPolicyRunnerONNX(std::string policy_name
         "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint",
         "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint"};
 
-    policy_order = {
-        "FR_hip_joint", "FR_thigh_joint", "FR_calf_joint",
-        "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint",
-        "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint",
-        "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint"};
+    policy_order = metadata.joint_order;
 
-    action_scale_robot = {0.25f, 0.25f, 0.25f,
-                          0.25f, 0.25f, 0.25f,
-                          0.25f, 0.25f, 0.25f,
-                          0.25f, 0.25f, 0.25f};
-
-    dof_pos_default_policy.setZero(12);
-    dof_pos_default_policy << 0.0000, -0.8000, 1.6000,
-                              0.0000, -0.8000, 1.6000,
-                              0.0000, -0.8000, 1.6000,
-                              0.0000, -0.8000, 1.6000;
-
-    dof_pos_default_robot.setZero(12);
-    dof_pos_default_robot << 0.0000, -0.8000, 1.6000,
-                             0.0000, -0.8000, 1.6000,
-                             0.0000, -0.8000, 1.6000,
-                             0.0000, -0.8000, 1.6000;
-
+    dof_pos_default_policy = Eigen::Map<const Eigen::VectorXf>(
+        metadata.default_joint_pos.data(), metadata.default_joint_pos.size());
 
     kp_ = 20. * VecXf::Ones(12);
     kd_ =  1. * VecXf::Ones(12);
     max_cmd_vel_ << 0.8, 0.8, 0.8;
+    omega_scale_ = metadata.omega_scale;
+    lin_vel_scale_ = metadata.lin_vel_scale;
+    dof_vel_scale_ = metadata.dof_vel_scale;
+    decimation_ = metadata.decimation;
 
     current_obs_ = VecXf::Zero(obs_dim_);
     tmp_action = VecXf::Zero(act_dim_);
@@ -121,7 +127,11 @@ MiniCheetahPolicyRunnerONNX::MiniCheetahPolicyRunnerONNX(std::string policy_name
 
     robot2policy_idx = generate_permutation(robot_order, policy_order);
     policy2robot_idx = generate_permutation(policy_order, robot_order);
+    action_scale_robot.resize(act_dim_);
+    dof_pos_default_robot.setZero(act_dim_);
     for (int i = 0; i < act_dim_; ++i) {
+        action_scale_robot[i] = metadata.action_scale[policy2robot_idx[i]];
+        dof_pos_default_robot(i) = metadata.default_joint_pos[policy2robot_idx[i]];
         std::cout << "robot2policy_idx[" << i << "]: " << robot2policy_idx[i] << std::endl;
         std::cout << "policy2robot_idx[" << i << "]: " << policy2robot_idx[i] << std::endl;
     }
@@ -142,8 +152,6 @@ MiniCheetahPolicyRunnerONNX::MiniCheetahPolicyRunnerONNX(std::string policy_name
 
         std::cout << policy_name_ << " ONNX policy network test success" << std::endl;
     }
-
-    decimation_ = 12;
 }
 
 // The destructor must be defined in the .cpp where OrtImpl is complete.
@@ -155,6 +163,7 @@ MiniCheetahPolicyRunnerONNX::~MiniCheetahPolicyRunnerONNX() = default;
 void MiniCheetahPolicyRunnerONNX::DisplayPolicyInfo() {
     std::cout << "ONNX policy: " << policy_name_ << "\n";
     std::cout << "path: " << model_path_ << "\n";
+    std::cout << "metadata: " << metadata_path_ << "\n";
     std::cout << "obs_dim: " << obs_dim_ << ", action_dim: " << act_dim_ << "\n";
 }
 
