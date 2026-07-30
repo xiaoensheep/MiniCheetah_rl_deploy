@@ -129,7 +129,7 @@ class MuJoCoSimulation:
         tau = self.input_tq.flatten()
         q_world = self.data.qpos[3:7]
         rpy = self.quaternion_to_euler(q_world)
-        angvel_b = self.data.qvel[3:6]
+        angvel_b = self._base_angular_velocity_body()
         mat = np.zeros(9, dtype=np.float64)
         mujoco.mju_quat2Mat(mat, q_world.astype(np.float64))
         R = mat.reshape(3, 3)
@@ -249,6 +249,13 @@ class MuJoCoSimulation:
         rot_body_to_world = mat.reshape(3, 3)
         return (rot_body_to_world.T @ self.data.qvel[0:3]).astype(np.float32)
 
+    def _base_angular_velocity_body(self):
+        q_world = self.data.qpos[3:7]
+        mat = np.zeros(9, dtype=np.float64)
+        mujoco.mju_quat2Mat(mat, q_world.astype(np.float64))
+        rot_body_to_world = mat.reshape(3, 3)
+        return (rot_body_to_world.T @ self.data.qvel[3:6]).astype(np.float32)
+
     def quaternion_to_euler(self, q):
         """
         Convert a quaternion to Euler angles (roll, pitch, yaw).
@@ -269,7 +276,7 @@ class MuJoCoSimulation:
         # IMU
         q_world = self.data.qpos[3:7]
         rpy = self.quaternion_to_euler(q_world)
-        angvel_b = self.data.qvel[3:6]
+        angvel_b = self._base_angular_velocity_body()
         body_acc = self.body_acc
         base_linvel_b = self._base_linear_velocity_body()
         base_height = np.array([self.data.qpos[2]], dtype=np.float32)

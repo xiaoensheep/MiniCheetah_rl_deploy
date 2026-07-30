@@ -38,10 +38,6 @@ void OnnxPolicyRunnerReplaysLoggedObservationShape() {
     Expect(IsFinite(output.clipped_action), "clipped action finite");
     Expect(IsFinite(output.target_joint_pos), "target joint position finite");
 
-    for (int i = 0; i < output.clipped_action.size(); ++i) {
-        Expect(output.clipped_action(i) >= -1.000001f, "clipped action lower limit");
-        Expect(output.clipped_action(i) <= 1.000001f, "clipped action upper limit");
-    }
 }
 
 void OnnxPolicyRunnerRejectsWrongObservationShape() {
@@ -70,6 +66,13 @@ types::RobotBasicState MakeStandingRobotState(int action_dim) {
     return state;
 }
 
+types::RobotBasicState MakeRobotDefaultStandingState(const PolicyMetadata& metadata) {
+    types::RobotBasicState state = MakeStandingRobotState(metadata.action_dim);
+    state.joint_pos = Eigen::Map<const Eigen::VectorXf>(
+        metadata.robot_default_joint_pos.data(), metadata.robot_default_joint_pos.size());
+    return state;
+}
+
 void OnnxPolicyRunnerExposesLastControlStepForLogging() {
     const PolicyMetadata metadata = LoadPolicyMetadata(ResolvePolicyMetadataPath());
     MiniCheetahPolicyRunnerONNX runner("onnx_replay_get_action_test");
@@ -90,6 +93,19 @@ void OnnxPolicyRunnerExposesLastControlStepForLogging() {
     Expect(IsFinite(output.target_joint_pos), "last target finite");
 }
 
+void OnnxPolicyRunnerMapsRobotDefaultPoseToZeroPolicyJointObservation() {
+    const PolicyMetadata metadata = LoadPolicyMetadata(ResolvePolicyMetadataPath());
+    MiniCheetahPolicyRunnerONNX runner("onnx_replay_joint_sign_test");
+    runner.OnEnter();
+
+    (void)runner.GetRobotAction(MakeRobotDefaultStandingState(metadata));
+    const types::VecXf& observation = runner.GetLastObservation();
+
+    for (int i = 0; i < metadata.action_dim; ++i) {
+        Expect(std::fabs(observation(12 + i)) < 1e-6f, "robot default should map to zero joint_pos_rel");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -97,6 +113,7 @@ int main() {
         OnnxPolicyRunnerReplaysLoggedObservationShape();
         OnnxPolicyRunnerRejectsWrongObservationShape();
         OnnxPolicyRunnerExposesLastControlStepForLogging();
+        OnnxPolicyRunnerMapsRobotDefaultPoseToZeroPolicyJointObservation();
     } catch (const std::exception& e) {
         std::cerr << "onnx_policy_replay_test failed: " << e.what() << std::endl;
         return EXIT_FAILURE;

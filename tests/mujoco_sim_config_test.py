@@ -37,13 +37,14 @@ def write_metadata(root: Path):
         "action_dim": 12,
         "action_semantics": "target_joint_position",
         "joint_order": CANONICAL_JOINT_ORDER,
-        "default_joint_pos": [0.0, -0.8, 1.6] * 4,
+        "default_joint_pos": [0.0, 0.8, -1.6] * 4,
+        "robot_default_joint_pos": [0.0, -0.8, 1.6] * 4,
         "action_scale": [0.25] * 12,
-        "lin_vel_scale": 2.0,
-        "omega_scale": 0.25,
-        "dof_vel_scale": 0.05,
+        "lin_vel_scale": 1.0,
+        "omega_scale": 1.0,
+        "dof_vel_scale": 1.0,
         "target_base_height": 0.28,
-        "decimation": 12,
+        "decimation": 20,
         "policy_frequency_hz": 50.0,
         "pd_update_frequency_hz": 1000.0,
     }
@@ -56,9 +57,12 @@ def test_policy_stand_pose_defaults():
         write_metadata(root)
         defaults = load_policy_sim_defaults(root)
 
-        expect(defaults.default_joint_pos == [0.0, -0.8, 1.6] * 4, "default joint pose")
+        policy_default = [0.0, 0.8, -1.6] * 4
+        robot_default = [0.0, -0.8, 1.6] * 4
+        expect(defaults.default_joint_pos == policy_default, "policy default joint pose")
+        expect(defaults.robot_default_joint_pos == robot_default, "robot default joint pose")
         expect(abs(defaults.target_base_height - 0.28) < 1e-6, "target base height")
-        expect(initial_joint_pose("stand", defaults) == defaults.default_joint_pos, "stand joint pose")
+        expect(initial_joint_pose("stand", defaults) == robot_default, "stand joint pose")
         expect(abs(initial_base_height("stand", defaults) - 0.28) < 1e-6, "stand height")
 
 
@@ -119,7 +123,7 @@ def test_incomplete_metadata_is_rejected():
         expect(rejected, "incomplete policy metadata should fail")
 
 
-def test_wrong_joint_order_is_rejected():
+def test_reordered_policy_joint_order_is_accepted():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         write_metadata(root)
@@ -128,12 +132,25 @@ def test_wrong_joint_order_is_rejected():
         metadata["joint_order"] = list(reversed(CANONICAL_JOINT_ORDER))
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
 
+        defaults = load_policy_sim_defaults(root)
+        expect(defaults.robot_default_joint_pos == [0.0, -0.8, 1.6] * 4, "reordered policy joint order")
+
+
+def test_duplicate_joint_order_is_rejected():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_metadata(root)
+        metadata_path = root / "policy" / "ppo" / "policy_metadata.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["joint_order"][-1] = metadata["joint_order"][0]
+        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+
         rejected = False
         try:
             load_policy_sim_defaults(root)
         except ValueError:
             rejected = True
-        expect(rejected, "wrong joint order should fail")
+        expect(rejected, "duplicate joint order should fail")
 
 
 def test_startup_hold_gains_are_enabled():
@@ -148,5 +165,6 @@ if __name__ == "__main__":
     test_default_initial_pose_is_crouch_waiting_pose()
     test_unknown_pose_is_rejected()
     test_incomplete_metadata_is_rejected()
-    test_wrong_joint_order_is_rejected()
+    test_reordered_policy_joint_order_is_accepted()
+    test_duplicate_joint_order_is_rejected()
     test_startup_hold_gains_are_enabled()

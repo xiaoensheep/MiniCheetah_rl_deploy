@@ -114,7 +114,7 @@ public:
         std::shared_ptr<ControllerData> data_ptr):StateBase(robot_type, state_name, data_ptr){
             const PolicyMetadata policy_metadata = LoadPolicyMetadata(ResolvePolicyMetadataPath());
             goal_joint_pos_ = Eigen::Map<const Eigen::VectorXf>(
-                policy_metadata.default_joint_pos.data(), policy_metadata.default_joint_pos.size());
+                policy_metadata.robot_default_joint_pos.data(), policy_metadata.robot_default_joint_pos.size());
             policy_entry_gate_config_.default_joint_pos = goal_joint_pos_;
             policy_entry_gate_config_.target_base_height = policy_metadata.target_base_height;
             policy_entry_gate_config_.max_control_dt = 1.5f / policy_metadata.pd_update_frequency_hz;

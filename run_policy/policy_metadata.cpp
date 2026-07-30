@@ -5,6 +5,7 @@
 #include <regex>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace {
 
@@ -35,6 +36,11 @@ std::string FindArrayBody(const std::string& text, const std::string& key) {
         throw std::runtime_error("Missing policy metadata array: " + key);
     }
     return match[1].str();
+}
+
+bool HasValue(const std::string& text, const std::string& key) {
+    const std::regex pattern("\"" + key + "\"\\s*:");
+    return std::regex_search(text, pattern);
 }
 
 int LoadInt(const std::string& text, const std::string& key) {
@@ -83,7 +89,30 @@ std::vector<std::string> LoadStringArray(const std::string& text, const std::str
     return values;
 }
 
+std::vector<float> LoadOptionalFloatArray(
+    const std::string& text,
+    const std::string& key,
+    const std::vector<float>& fallback) {
+    if (!HasValue(text, key)) {
+        return fallback;
+    }
+    return LoadFloatArray(text, key);
+}
+
+float LoadOptionalFloat(const std::string& text, const std::string& key, float fallback) {
+    if (!HasValue(text, key)) {
+        return fallback;
+    }
+    return LoadFloat(text, key);
+}
+
 void ValidatePolicyMetadata(const PolicyMetadata& metadata) {
+    const std::unordered_set<std::string> canonical_joint_names = {
+        "FR_hip_joint", "FR_thigh_joint", "FR_calf_joint",
+        "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint",
+        "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint",
+        "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint"};
+
     if (metadata.obs_dim <= 0) {
         throw std::runtime_error("Policy metadata obs_dim must be positive");
     }
@@ -96,11 +125,31 @@ void ValidatePolicyMetadata(const PolicyMetadata& metadata) {
     if (metadata.joint_order.size() != static_cast<size_t>(metadata.action_dim)) {
         throw std::runtime_error("Policy metadata joint_order size must match action_dim");
     }
+    const std::unordered_set<std::string> metadata_joint_names(
+        metadata.joint_order.begin(), metadata.joint_order.end());
+    if (metadata_joint_names != canonical_joint_names) {
+        throw std::runtime_error("Policy metadata joint_order must contain the canonical Mini Cheetah joints");
+    }
     if (metadata.default_joint_pos.size() != static_cast<size_t>(metadata.action_dim)) {
         throw std::runtime_error("Policy metadata default_joint_pos size must match action_dim");
     }
     if (metadata.action_scale.size() != static_cast<size_t>(metadata.action_dim)) {
         throw std::runtime_error("Policy metadata action_scale size must match action_dim");
+    }
+    if (metadata.robot_default_joint_pos.size() != static_cast<size_t>(metadata.action_dim)) {
+        throw std::runtime_error("Policy metadata robot_default_joint_pos size must match action_dim");
+    }
+    if (metadata.joint_position_sign.size() != static_cast<size_t>(metadata.action_dim)) {
+        throw std::runtime_error("Policy metadata joint_position_sign size must match action_dim");
+    }
+    if (metadata.kp.size() != static_cast<size_t>(metadata.action_dim)) {
+        throw std::runtime_error("Policy metadata kp size must match action_dim");
+    }
+    if (metadata.kd.size() != static_cast<size_t>(metadata.action_dim)) {
+        throw std::runtime_error("Policy metadata kd size must match action_dim");
+    }
+    if (metadata.action_clip <= 0.0f) {
+        throw std::runtime_error("Policy metadata action_clip must be positive");
     }
     if (metadata.decimation <= 0) {
         throw std::runtime_error("Policy metadata decimation must be positive");
@@ -121,7 +170,14 @@ PolicyMetadata LoadPolicyMetadata(const std::string& path) {
     metadata.action_semantics = LoadString(text, "action_semantics");
     metadata.joint_order = LoadStringArray(text, "joint_order");
     metadata.default_joint_pos = LoadFloatArray(text, "default_joint_pos");
+    metadata.robot_default_joint_pos = LoadOptionalFloatArray(
+        text, "robot_default_joint_pos", metadata.default_joint_pos);
+    metadata.joint_position_sign = LoadOptionalFloatArray(
+        text, "joint_position_sign", std::vector<float>(metadata.action_dim, 1.0f));
     metadata.action_scale = LoadFloatArray(text, "action_scale");
+    metadata.kp = LoadOptionalFloatArray(text, "kp", std::vector<float>(metadata.action_dim, 20.0f));
+    metadata.kd = LoadOptionalFloatArray(text, "kd", std::vector<float>(metadata.action_dim, 1.0f));
+    metadata.action_clip = LoadOptionalFloat(text, "action_clip", 1.0f);
     metadata.lin_vel_scale = LoadFloat(text, "lin_vel_scale");
     metadata.omega_scale = LoadFloat(text, "omega_scale");
     metadata.dof_vel_scale = LoadFloat(text, "dof_vel_scale");

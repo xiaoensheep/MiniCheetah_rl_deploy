@@ -54,6 +54,7 @@ private:
     VecXf transition_start_joint_pos_;
 
     VecXf dof_pos_default_robot, dof_pos_default_policy;
+    VecXf joint_position_sign_policy, joint_position_sign_robot;
     VecXf kp_, kd_;
     Vec3f max_cmd_vel_;
     Vec3f gravity_direction;

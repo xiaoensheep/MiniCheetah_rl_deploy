@@ -9,7 +9,12 @@ struct PolicyMetadata {
     std::string action_semantics;
     std::vector<std::string> joint_order;
     std::vector<float> default_joint_pos;
+    std::vector<float> robot_default_joint_pos;
+    std::vector<float> joint_position_sign;
     std::vector<float> action_scale;
+    std::vector<float> kp;
+    std::vector<float> kd;
+    float action_clip = 1.0f;
     float lin_vel_scale = 0.0f;
     float omega_scale = 0.0f;
     float dof_vel_scale = 0.0f;

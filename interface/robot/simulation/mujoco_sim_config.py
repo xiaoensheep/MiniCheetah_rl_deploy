@@ -76,6 +76,7 @@ STARTUP_HOLD_KD = 1.0
 @dataclass(frozen=True)
 class PolicySimDefaults:
     default_joint_pos: list[float]
+    robot_default_joint_pos: list[float]
     target_base_height: float
 
 
@@ -110,12 +111,17 @@ def load_policy_sim_defaults(project_root: str | Path) -> PolicySimDefaults:
         raise ValueError("Mini Cheetah policy action_dim must be 12")
     if metadata["action_semantics"] != "target_joint_position":
         raise ValueError(f"Unsupported Mini Cheetah action semantics: {metadata['action_semantics']}")
-    if metadata["joint_order"] != CANONICAL_JOINT_ORDER:
-        raise ValueError("Mini Cheetah policy joint_order must match the canonical deployment order")
+    if sorted(metadata["joint_order"]) != sorted(CANONICAL_JOINT_ORDER):
+        raise ValueError("Mini Cheetah policy joint_order must contain the canonical Mini Cheetah joints")
 
     default_joint_pos = [float(value) for value in metadata["default_joint_pos"]]
     if len(default_joint_pos) != 12:
         raise ValueError("Mini Cheetah policy default_joint_pos must contain 12 values")
+    robot_default_joint_pos = [
+        float(value) for value in metadata.get("robot_default_joint_pos", default_joint_pos)
+    ]
+    if len(robot_default_joint_pos) != 12:
+        raise ValueError("Mini Cheetah policy robot_default_joint_pos must contain 12 values")
     action_scale = [float(value) for value in metadata["action_scale"]]
     if len(action_scale) != 12:
         raise ValueError("Mini Cheetah policy action_scale must contain 12 values")
@@ -126,13 +132,14 @@ def load_policy_sim_defaults(project_root: str | Path) -> PolicySimDefaults:
 
     return PolicySimDefaults(
         default_joint_pos=default_joint_pos,
+        robot_default_joint_pos=robot_default_joint_pos,
         target_base_height=float(metadata["target_base_height"]),
     )
 
 
 def initial_joint_pose(initial_pose: str, defaults: PolicySimDefaults) -> list[float]:
     if initial_pose == "stand":
-        return defaults.default_joint_pos
+        return defaults.robot_default_joint_pos
     if initial_pose == "crouch":
         return CROUCH_JOINT_POS
     raise ValueError(f"Unsupported Mini Cheetah initial pose: {initial_pose}")
@@ -140,7 +147,7 @@ def initial_joint_pose(initial_pose: str, defaults: PolicySimDefaults) -> list[f
 
 def initial_hold_joint_pose(initial_pose: str, defaults: PolicySimDefaults) -> list[float]:
     if initial_pose == "stand":
-        return defaults.default_joint_pos
+        return defaults.robot_default_joint_pos
     if initial_pose == "crouch":
         return CROUCH_HOLD_JOINT_POS
     raise ValueError(f"Unsupported Mini Cheetah initial pose: {initial_pose}")

@@ -95,14 +95,17 @@ MiniCheetahPolicyRunnerONNX::MiniCheetahPolicyRunnerONNX(std::string policy_name
 
     dof_pos_default_policy = Eigen::Map<const Eigen::VectorXf>(
         metadata.default_joint_pos.data(), metadata.default_joint_pos.size());
+    joint_position_sign_policy = Eigen::Map<const Eigen::VectorXf>(
+        metadata.joint_position_sign.data(), metadata.joint_position_sign.size());
 
-    kp_ = 20. * VecXf::Ones(12);
-    kd_ =  1. * VecXf::Ones(12);
+    kp_ = Eigen::Map<const Eigen::VectorXf>(metadata.kp.data(), metadata.kp.size());
+    kd_ = Eigen::Map<const Eigen::VectorXf>(metadata.kd.data(), metadata.kd.size());
     max_cmd_vel_ << 0.8, 0.8, 0.8;
     omega_scale_ = metadata.omega_scale;
     lin_vel_scale_ = metadata.lin_vel_scale;
     dof_vel_scale_ = metadata.dof_vel_scale;
     decimation_ = metadata.decimation;
+    action_clip_ = metadata.action_clip;
 
     current_obs_ = VecXf::Zero(obs_dim_);
     tmp_action = VecXf::Zero(act_dim_);
@@ -122,9 +125,11 @@ MiniCheetahPolicyRunnerONNX::MiniCheetahPolicyRunnerONNX(std::string policy_name
     policy2robot_idx = generate_permutation(policy_order, robot_order);
     action_scale_robot.resize(act_dim_);
     dof_pos_default_robot.setZero(act_dim_);
+    joint_position_sign_robot.setZero(act_dim_);
     for (int i = 0; i < act_dim_; ++i) {
         action_scale_robot[i] = metadata.action_scale[policy2robot_idx[i]];
-        dof_pos_default_robot(i) = metadata.default_joint_pos[policy2robot_idx[i]];
+        dof_pos_default_robot(i) = metadata.robot_default_joint_pos[i];
+        joint_position_sign_robot(i) = metadata.joint_position_sign[policy2robot_idx[i]];
         std::cout << "robot2policy_idx[" << i << "]: " << robot2policy_idx[i] << std::endl;
         std::cout << "policy2robot_idx[" << i << "]: " << policy2robot_idx[i] << std::endl;
     }
@@ -209,8 +214,8 @@ RobotAction MiniCheetahPolicyRunnerONNX::GetRobotAction(const RobotBasicState& r
     Vec3f cmd_vel          = ro.cmd_vel_normlized.cwiseProduct(max_cmd_vel_);
 
     for (int i = 0; i < act_dim_; ++i) {
-        joint_pos_rl(i) = ro.joint_pos(robot2policy_idx[i]);
-        joint_vel_rl(i) = ro.joint_vel(robot2policy_idx[i]) * dof_vel_scale_;
+        joint_pos_rl(i) = joint_position_sign_policy(i) * ro.joint_pos(robot2policy_idx[i]);
+        joint_vel_rl(i) = joint_position_sign_policy(i) * ro.joint_vel(robot2policy_idx[i]) * dof_vel_scale_;
     }
     joint_pos_rl -= dof_pos_default_policy;
 
@@ -279,9 +284,12 @@ VecXf MiniCheetahPolicyRunnerONNX::BuildTargetJointPosition(const VecXf& clipped
 
     VecXf target(act_dim_);
     for (int i = 0; i < act_dim_; ++i) {
-        target(i) = clipped_policy_action(policy2robot_idx[i]) * action_scale_robot[i];
+        const int policy_index = policy2robot_idx[i];
+        const float target_policy =
+            dof_pos_default_policy(policy_index) +
+            clipped_policy_action(policy_index) * action_scale_robot[i];
+        target(i) = joint_position_sign_robot(i) * target_policy;
     }
-    target += dof_pos_default_robot;
 
     for (int leg = 0; leg < 4; ++leg) {
         const int abad = 3 * leg;
