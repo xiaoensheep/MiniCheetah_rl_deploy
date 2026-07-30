@@ -16,6 +16,7 @@ from mujoco_sim_config import (
     initial_base_pos,
     initial_base_quat,
     initial_base_height,
+    initial_hold_joint_pose,
     initial_joint_pose,
     initial_qvel,
     load_policy_sim_defaults,
@@ -79,7 +80,10 @@ class MuJoCoSimulation:
         self.kp_cmd = np.full((self.dof_num, 1), STARTUP_HOLD_KP, np.float32)
         self.kd_cmd = np.zeros_like(self.kp_cmd)
         self.kd_cmd.fill(STARTUP_HOLD_KD)
-        self.pos_cmd = self.data.qpos[7:7+self.dof_num].astype(np.float32).reshape(self.dof_num, 1)
+        self.pos_cmd = np.array(
+            initial_hold_joint_pose(self.initial_pose, self.policy_defaults),
+            dtype=np.float32,
+        ).reshape(self.dof_num, 1)
         self.vel_cmd = np.zeros_like(self.kp_cmd)
         self.tau_ff = np.zeros_like(self.kp_cmd)
         self.input_tq = np.zeros_like(self.kp_cmd)

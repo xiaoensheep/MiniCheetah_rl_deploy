@@ -6,6 +6,7 @@ from pathlib import Path
 
 from interface.robot.simulation.mujoco_sim_config import (
     CANONICAL_JOINT_ORDER,
+    CROUCH_HOLD_JOINT_POS,
     CROUCH_JOINT_POS,
     CROUCH_BASE_POS,
     CROUCH_BASE_QUAT,
@@ -17,6 +18,7 @@ from interface.robot.simulation.mujoco_sim_config import (
     initial_base_quat,
     initial_base_height,
     initial_joint_pose,
+    initial_hold_joint_pose,
     initial_qvel,
     load_policy_sim_defaults,
 )
@@ -67,10 +69,17 @@ def test_crouch_pose_is_available_for_manual_debugging():
         defaults = load_policy_sim_defaults(root)
 
         expect(initial_joint_pose("crouch", defaults) == CROUCH_JOINT_POS, "crouch joint pose")
+        expect(initial_hold_joint_pose("crouch", defaults) == CROUCH_HOLD_JOINT_POS, "crouch hold joint pose")
         expect(initial_base_pos("crouch", defaults) == CROUCH_BASE_POS, "crouch base position")
         expect(initial_base_quat("crouch") == CROUCH_BASE_QUAT, "crouch base quaternion")
         expect(initial_qvel("crouch", 12) == CROUCH_QVEL, "crouch qvel")
         expect(abs(initial_base_height("crouch", defaults) - 0.096633) < 1e-6, "crouch height")
+
+
+def test_crouch_hold_pose_stays_inside_deployment_limits():
+    expect(CROUCH_HOLD_JOINT_POS[2] <= 2.6, "FR crouch hold calf upper limit")
+    expect(CROUCH_HOLD_JOINT_POS[5] <= 2.6, "FL crouch hold calf upper limit")
+    expect(CROUCH_HOLD_JOINT_POS != CROUCH_JOINT_POS, "raw keyframe and hold pose should be distinct")
 
 
 def test_default_initial_pose_is_crouch_waiting_pose():
@@ -135,6 +144,7 @@ def test_startup_hold_gains_are_enabled():
 if __name__ == "__main__":
     test_policy_stand_pose_defaults()
     test_crouch_pose_is_available_for_manual_debugging()
+    test_crouch_hold_pose_stays_inside_deployment_limits()
     test_default_initial_pose_is_crouch_waiting_pose()
     test_unknown_pose_is_rejected()
     test_incomplete_metadata_is_rejected()

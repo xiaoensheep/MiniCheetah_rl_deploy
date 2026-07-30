@@ -13,6 +13,7 @@
 #include "state_base.h"
 #include "policy_entry_gate.h"
 #include "policy_metadata.h"
+#include "simulation_packet_codec.h"
 
 class StandUpState : public StateBase{
 private:
@@ -167,6 +168,7 @@ public:
 
         joint_cmd_.col(1) = planning_joint_pos;
         joint_cmd_.col(3) = planning_joint_vel;
+        joint_cmd_ = ClampJointCommandToLimits(joint_cmd_, MiniCheetahJointCommandLimits(), 12);
         ri_ptr_->SetJointCommand(joint_cmd_); // (current torque, not last torque, video content slip of the tongue)
     }
     virtual bool LoseControlJudge() {

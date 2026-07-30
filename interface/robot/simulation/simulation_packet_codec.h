@@ -78,6 +78,11 @@ JointCommandLimitResult ValidateJointCommandLimits(
     const JointCommandLimits& limits,
     int dof_num);
 
+types::MatXf ClampJointCommandToLimits(
+    const types::MatXf& command,
+    const JointCommandLimits& limits,
+    int dof_num);
+
 types::MatXf BuildJointDampingCommand(
     const types::VecXf& kd,
     int dof_num);

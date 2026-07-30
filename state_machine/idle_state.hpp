@@ -28,6 +28,7 @@ private:
 #endif
 
     float last_print_time = 0;
+    float last_status_print_time = -10000;
     void GetProprioceptiveData(){
         joint_pos_ = ri_ptr_->GetJointPosition();
         joint_vel_ = ri_ptr_->GetJointVelocity();
@@ -141,7 +142,11 @@ public:
         // std::cout << "Current target_mode = " << uc_ptr_->GetUserCommand().target_mode << std::endl;
 
         if(!joint_normal_flag_ || !imu_normal_flag_) {
-            std::cout << "joint status: " << joint_normal_flag_ << " | imu status: " << imu_normal_flag_ << std::endl;
+            if (((ri_ptr_->GetInterfaceTimeStamp() - last_status_print_time) > 1)) {
+                std::cout << "joint status: " << joint_normal_flag_
+                          << " | imu status: " << imu_normal_flag_ << std::endl;
+                last_status_print_time = ri_ptr_->GetInterfaceTimeStamp();
+            }
             return StateName::kIdle;
         }
         if(first_enter_flag_ && ri_ptr_->GetInterfaceTimeStamp() - enter_state_time_ < 0.5){

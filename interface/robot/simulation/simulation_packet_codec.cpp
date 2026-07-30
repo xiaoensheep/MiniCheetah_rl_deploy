@@ -1,5 +1,6 @@
 #include "simulation_packet_codec.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
@@ -189,6 +190,45 @@ JointCommandLimitResult ValidateJointCommandLimits(
     result.valid = true;
     result.reason = JointCommandLimitReason::kValid;
     return result;
+}
+
+types::MatXf ClampJointCommandToLimits(
+    const types::MatXf& command,
+    const JointCommandLimits& limits,
+    int dof_num) {
+    RequireCanonicalDofCount(dof_num);
+    if (command.rows() != dof_num ||
+        command.cols() != kJointCommandColumnCount ||
+        !LimitsHaveCanonicalSize(limits, dof_num)) {
+        throw std::runtime_error("Joint command clamp inputs do not match deployment interface contract");
+    }
+
+    types::MatXf clamped = command;
+    for (int joint = 0; joint < dof_num; ++joint) {
+        for (int column = 0; column < kJointCommandColumnCount; ++column) {
+            if (!IsFinite(command(joint, column))) {
+                throw std::runtime_error("Joint command clamp rejects non-finite values");
+            }
+        }
+
+        clamped(joint, kJointCommandPosition) =
+            std::clamp(command(joint, kJointCommandPosition),
+                       limits.position_lower(joint),
+                       limits.position_upper(joint));
+        clamped(joint, kJointCommandVelocity) =
+            std::clamp(command(joint, kJointCommandVelocity),
+                       -limits.velocity_abs_max(joint),
+                       limits.velocity_abs_max(joint));
+        clamped(joint, kJointCommandKp) =
+            std::clamp(command(joint, kJointCommandKp), 0.0f, limits.kp_max(joint));
+        clamped(joint, kJointCommandKd) =
+            std::clamp(command(joint, kJointCommandKd), 0.0f, limits.kd_max(joint));
+        clamped(joint, kJointCommandFeedForwardTorque) =
+            std::clamp(command(joint, kJointCommandFeedForwardTorque),
+                       -limits.feedforward_torque_abs_max(joint),
+                       limits.feedforward_torque_abs_max(joint));
+    }
+    return clamped;
 }
 
 types::MatXf BuildJointDampingCommand(

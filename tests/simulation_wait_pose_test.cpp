@@ -1,4 +1,5 @@
 #include "simulation_wait_pose.h"
+#include "simulation_packet_codec.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -75,10 +76,10 @@ void CrouchHoldCommandUsesPdPositionHold() {
     const float expected_positions[12] = {
         -0.12319f,
         -1.54732f,
-        2.60066f,
+        2.35f,
         0.116436f,
         -1.5563f,
-        2.61816f,
+        2.35f,
         -0.0559533f,
         -1.50758f,
         2.46631f,
@@ -102,12 +103,25 @@ void CrouchHoldCommandUsesPdPositionHold() {
     }
 }
 
+void CrouchHoldCommandFitsDeploymentLimits() {
+    const types::Vec3f kp(40.0f, 40.0f, 40.0f);
+    const types::Vec3f kd(1.0f, 1.0f, 1.0f);
+    const types::MatXf command = simulation_wait_pose::BuildMiniCheetahCrouchHoldCommand(kp, kd);
+    const JointCommandLimitResult limit_result =
+        ValidateJointCommandLimits(command, MiniCheetahJointCommandLimits(), 12);
+    if (!limit_result.valid) {
+        throw std::runtime_error("crouch hold command violates deployment limits");
+    }
+    (void)EncodeJointCommandPacket(command, 12);
+}
+
 }  // namespace
 
 int main() {
     try {
         CrouchPoseUsesCanonicalMiniCheetahOrder();
         CrouchHoldCommandUsesPdPositionHold();
+        CrouchHoldCommandFitsDeploymentLimits();
     } catch (const std::exception& e) {
         std::cerr << "simulation_wait_pose_test failed: " << e.what() << std::endl;
         return EXIT_FAILURE;

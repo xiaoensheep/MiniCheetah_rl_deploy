@@ -296,6 +296,23 @@ void JointCommandLimitsRejectEachUnsafeColumn() {
     Expect(result.reason == JointCommandLimitReason::kNonFinite, "non-finite limit reason");
 }
 
+void JointCommandClampMakesSlightlyUnsafeStandupSeedEncodable() {
+    types::MatXf command = SafeStandingCommand();
+    command(5, kJointCommandPosition) = 2.70621f;
+    command(11, kJointCommandPosition) = 2.61663f;
+
+    const JointCommandLimits limits = MiniCheetahJointCommandLimits();
+    Expect(!ValidateJointCommandLimits(command, limits, 12).valid,
+           "raw standup seed should exceed deployment position limits");
+
+    const types::MatXf clamped = ClampJointCommandToLimits(command, limits, 12);
+    Expect(ValidateJointCommandLimits(clamped, limits, 12).valid,
+           "clamped standup seed should satisfy deployment limits");
+    ExpectNear(clamped(5, kJointCommandPosition), 2.60f, "FL calf clamped position");
+    ExpectNear(clamped(11, kJointCommandPosition), 2.60f, "RL calf clamped position");
+    (void)EncodeJointCommandPacket(clamped, 12);
+}
+
 void JointDampingCommandHasSafeFallbackSemantics() {
     const types::VecXf kd = types::VecXf::Ones(12);
     const types::MatXf damping = BuildJointDampingCommand(kd, 12);
@@ -346,6 +363,7 @@ int main() {
         JointCommandPacketRejectsWrongShape();
         JointCommandLimitsAcceptSafeCommand();
         JointCommandLimitsRejectEachUnsafeColumn();
+        JointCommandClampMakesSlightlyUnsafeStandupSeedEncodable();
         JointDampingCommandHasSafeFallbackSemantics();
         JointDampingCommandRejectsUnsafeFallbackInputs();
     } catch (const std::exception& e) {

@@ -31,6 +31,20 @@ CROUCH_JOINT_POS = [
     -1.5152,
     2.48509,
 ]
+CROUCH_HOLD_JOINT_POS = [
+    -0.12319,
+    -1.54732,
+    2.35,
+    0.116436,
+    -1.5563,
+    2.35,
+    -0.0559533,
+    -1.50758,
+    2.46631,
+    0.0480561,
+    -1.5152,
+    2.48509,
+]
 CROUCH_BASE_POS = [-0.000623329, 0.00176311, 0.096633]
 CROUCH_BASE_QUAT = [0.999062, -0.00688532, 0.0427483, 0.000266976]
 CROUCH_QVEL = [
@@ -121,6 +135,14 @@ def initial_joint_pose(initial_pose: str, defaults: PolicySimDefaults) -> list[f
         return defaults.default_joint_pos
     if initial_pose == "crouch":
         return CROUCH_JOINT_POS
+    raise ValueError(f"Unsupported Mini Cheetah initial pose: {initial_pose}")
+
+
+def initial_hold_joint_pose(initial_pose: str, defaults: PolicySimDefaults) -> list[float]:
+    if initial_pose == "stand":
+        return defaults.default_joint_pos
+    if initial_pose == "crouch":
+        return CROUCH_HOLD_JOINT_POS
     raise ValueError(f"Unsupported Mini Cheetah initial pose: {initial_pose}")
 
 
