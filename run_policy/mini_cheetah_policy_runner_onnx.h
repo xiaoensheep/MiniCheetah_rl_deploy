@@ -13,6 +13,7 @@
 #pragma once
 
 #include "policy_runner_base.hpp"
+#include "policy_replay.h"
 
 #include <Eigen/Dense>
 #include <memory>
@@ -21,7 +22,7 @@
 
 using namespace types;
 
-class MiniCheetahPolicyRunnerONNX : public PolicyRunnerBase {
+class MiniCheetahPolicyRunnerONNX : public PolicyRunnerBase, public ObservationPolicyReplay {
 public:
     explicit MiniCheetahPolicyRunnerONNX(std::string policy_name);
     ~MiniCheetahPolicyRunnerONNX();
@@ -29,6 +30,7 @@ public:
     void DisplayPolicyInfo() override;
     void OnEnter() override;
     RobotAction GetRobotAction(const RobotBasicState& ro) override;
+    ReplayPolicyOutput ReplayObservation(const VecXf& observation) override;
 
 private:
     // Hides all onnxruntime types so callers don't need to include
@@ -67,6 +69,8 @@ private:
     std::vector<float> action_scale_robot;
 
     RobotAction ra;
+
+    VecXf BuildTargetJointPosition(const VecXf& clipped_policy_action) const;
 
     std::vector<int> generate_permutation(
         const std::vector<std::string>& from,

@@ -164,6 +164,15 @@ target_include_directories(episode_log PUBLIC
     ${THIRD_PARTY}/eigen/
 )
 
+add_library(offline_replay STATIC logging/offline_replay.cpp)
+target_include_directories(offline_replay PUBLIC
+    logging
+    run_policy
+    types
+    ${THIRD_PARTY}/eigen/
+)
+target_link_libraries(offline_replay episode_log)
+
 # Building the policy runner as a separate library means that editing the
 # policy implementation only recompiles this one translation unit and
 # re-links, without touching the state machine or main.cpp object files.
@@ -242,4 +251,16 @@ if (BUILD_TESTING)
   target_include_directories(episode_log_test PRIVATE logging types ${THIRD_PARTY}/eigen/)
   target_link_libraries(episode_log_test episode_log)
   add_test(NAME episode_log_test COMMAND episode_log_test)
+
+  add_executable(offline_replay_test tests/offline_replay_test.cpp)
+  target_include_directories(offline_replay_test PRIVATE logging run_policy types ${THIRD_PARTY}/eigen/)
+  target_link_libraries(offline_replay_test offline_replay)
+  add_test(NAME offline_replay_test COMMAND offline_replay_test)
+
+  add_executable(onnx_policy_replay_test tests/onnx_policy_replay_test.cpp)
+  target_include_directories(onnx_policy_replay_test PRIVATE run_policy types ${THIRD_PARTY}/eigen/)
+  target_link_libraries(onnx_policy_replay_test run_policy)
+  add_test(NAME onnx_policy_replay_test COMMAND onnx_policy_replay_test)
+  set_tests_properties(onnx_policy_replay_test PROPERTIES
+      ENVIRONMENT "LD_LIBRARY_PATH=${ONNX_RUNTIME_ROOT}/lib")
 endif()

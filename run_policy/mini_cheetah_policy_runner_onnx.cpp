@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
+#include <stdexcept>
 #include <unordered_map>
 
 namespace {
@@ -164,6 +165,37 @@ void MiniCheetahPolicyRunnerONNX::OnEnter() {
     std::cout << "[ONNX ENTER] PolicyRunner entered: " << policy_name_ << std::endl;
 }
 
+ReplayPolicyOutput MiniCheetahPolicyRunnerONNX::ReplayObservation(const VecXf& observation) {
+    if (observation.size() != obs_dim_) {
+        throw std::runtime_error("MiniCheetahPolicyRunnerONNX replay observation dimension mismatch");
+    }
+
+    VecXf input = observation;
+    std::array<int64_t, 2> input_shape{1, obs_dim_};
+
+    Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
+        ort_->memory_info,
+        input.data(), input.size(),
+        input_shape.data(), input_shape.size());
+
+    std::vector<Ort::Value> inputs;
+    inputs.emplace_back(std::move(input_tensor));
+
+    auto output_tensors = ort_->session.Run(
+        Ort::RunOptions{nullptr},
+        ort_->input_names.data(), inputs.data(), 1,
+        ort_->output_names.data(), 1);
+
+    float* action_data = output_tensors[0].GetTensorMutableData<float>();
+    Eigen::Map<Eigen::MatrixXf> act(action_data, act_dim_, 1);
+
+    ReplayPolicyOutput output;
+    output.raw_action = VecXf(act);
+    output.clipped_action = output.raw_action.cwiseMax(-action_clip_).cwiseMin(action_clip_);
+    output.target_joint_pos = BuildTargetJointPosition(output.clipped_action);
+    return output;
+}
+
 RobotAction MiniCheetahPolicyRunnerONNX::GetRobotAction(const RobotBasicState& ro) {
     Vec3f base_lin_vel = ro.base_lin_vel * lin_vel_scale_;
     Vec3f base_omega       = ro.base_omega * omega_scale_;
@@ -185,41 +217,11 @@ RobotAction MiniCheetahPolicyRunnerONNX::GetRobotAction(const RobotBasicState& r
                     joint_vel_rl,
                     last_action;
 
-    std::array<int64_t, 2> input_shape{1, obs_dim_};
-
-    Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
-        ort_->memory_info,
-        current_obs_.data(), current_obs_.size(),
-        input_shape.data(), input_shape.size());
-
-    std::vector<Ort::Value> inputs;
-    inputs.emplace_back(std::move(input_tensor));
-
-    auto output_tensors = ort_->session.Run(
-        Ort::RunOptions{nullptr},
-        ort_->input_names.data(), inputs.data(), 1,
-        ort_->output_names.data(), 1);
-
-    float* action_data = output_tensors[0].GetTensorMutableData<float>();
-    Eigen::Map<Eigen::MatrixXf> act(action_data, act_dim_, 1);
-    action      = VecXf(act);
-    VecXf clipped_action = action.cwiseMax(-action_clip_).cwiseMin(action_clip_);
+    const ReplayPolicyOutput replay_output = ReplayObservation(current_obs_);
+    action = replay_output.raw_action;
+    VecXf clipped_action = replay_output.clipped_action;
     last_action = clipped_action;
-
-    for (int i = 0; i < act_dim_; ++i) {
-        tmp_action(i)  = clipped_action(policy2robot_idx[i]);
-        tmp_action(i) *= action_scale_robot[i];
-    }
-    tmp_action += dof_pos_default_robot;
-
-    for (int leg = 0; leg < 4; ++leg) {
-        const int abad = 3 * leg;
-        const int thigh = abad + 1;
-        const int calf = abad + 2;
-        tmp_action(abad) = std::max(-1.0f, std::min(1.0f, tmp_action(abad)));
-        tmp_action(thigh) = std::max(-1.8f, std::min(0.8f, tmp_action(thigh)));
-        tmp_action(calf) = std::max(0.4f, std::min(2.6f, tmp_action(calf)));
-    }
+    tmp_action = replay_output.target_joint_pos;
 
     if (!transition_start_recorded_) {
         transition_start_joint_pos_ = ro.joint_pos;
@@ -255,6 +257,29 @@ RobotAction MiniCheetahPolicyRunnerONNX::GetRobotAction(const RobotBasicState& r
 // ---------------------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------------------
+VecXf MiniCheetahPolicyRunnerONNX::BuildTargetJointPosition(const VecXf& clipped_policy_action) const {
+    if (clipped_policy_action.size() != act_dim_) {
+        throw std::runtime_error("MiniCheetahPolicyRunnerONNX action dimension mismatch");
+    }
+
+    VecXf target(act_dim_);
+    for (int i = 0; i < act_dim_; ++i) {
+        target(i) = clipped_policy_action(policy2robot_idx[i]) * action_scale_robot[i];
+    }
+    target += dof_pos_default_robot;
+
+    for (int leg = 0; leg < 4; ++leg) {
+        const int abad = 3 * leg;
+        const int thigh = abad + 1;
+        const int calf = abad + 2;
+        target(abad) = std::max(-1.0f, std::min(1.0f, target(abad)));
+        target(thigh) = std::max(-1.8f, std::min(0.8f, target(thigh)));
+        target(calf) = std::max(0.4f, std::min(2.6f, target(calf)));
+    }
+
+    return target;
+}
+
 std::vector<int> MiniCheetahPolicyRunnerONNX::generate_permutation(
     const std::vector<std::string>& from,
     const std::vector<std::string>& to,

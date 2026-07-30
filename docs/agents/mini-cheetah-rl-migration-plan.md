@@ -99,7 +99,7 @@ Acceptance criteria:
 
 ## Immediate Next Task
 
-Implement Policy Metadata and refactor `MiniCheetahPolicyRunnerONNX` to load deployment-critical constants from it. This is the first code task because it directly addresses the current instability diagnosis and unlocks contract testing.
+Wire structured episode logging into the simulation RL control path. The log and offline replay contracts now exist, and `MiniCheetahPolicyRunnerONNX` can replay a logged observation without commanding motors; the next step is to emit real episode records during MuJoCo sim2sim runs so replay compares actual rollout data.
 
 ## References
 
