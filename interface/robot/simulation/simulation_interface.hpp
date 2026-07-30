@@ -12,6 +12,7 @@
 #pragma once
 
 #include "robot_interface.h"
+#include "simulation_packet_codec.h"
 #include <iostream>
 #include <string>
 #include <sys/types.h>
@@ -136,15 +137,8 @@ namespace interface{
             }
 
             // 接收数据
-            const int float_count_with_base_height = 13 + 3 * dof_num_;
-            const int float_count_with_base_vel = 12 + 3 * dof_num_;
-            const int float_count_without_base_vel = 9 + 3 * dof_num_;
-            const int expected_size_with_base_height = sizeof(double) + sizeof(float) * float_count_with_base_height;
-            const int expected_size_with_base_vel = sizeof(double) + sizeof(float) * float_count_with_base_vel;
-            const int expected_size_without_base_vel = sizeof(double) + sizeof(float) * float_count_without_base_vel;
+            const int expected_size = RobotStatePacketSize(dof_num_);
             char buffer[1024]={0};
-            float data[64]={0};
-            bool warned_old_packet = false;
             struct sockaddr_in clientAddr;
             socklen_t clientAddrLen = sizeof(clientAddr);
 
@@ -163,50 +157,23 @@ namespace interface{
                     std::cerr << "Error receiving data" << std::endl;
                     return;
                 }
-                if (recvLen < expected_size_without_base_vel) {
-                    std::cerr << "Robot state UDP packet too small: " << recvLen
-                              << " bytes, expected at least " << expected_size_without_base_vel << std::endl;
+                if (recvLen != expected_size) {
+                    std::cerr << "Robot state UDP packet violates deployment interface contract: "
+                              << recvLen << " bytes, expected " << expected_size << std::endl;
                     continue;
                 }
 
-                std::memcpy(&run_time_, buffer, sizeof(double));
-                if (recvLen >= expected_size_with_base_height) {
-                    std::memcpy(data, buffer + sizeof(double), sizeof(float) * float_count_with_base_height);
-                    base_height_ = data[0];
-                    base_lin_vel_ = Eigen::Map<Vec3f>(data + 1, 3);
-                    rpy_ = Eigen::Map<Vec3f>(data + 4, 3);
-                    acc_ = Eigen::Map<Vec3f>(data + 7, 3);
-                    omega_body_ = Eigen::Map<Vec3f>(data + 10, 3);
-                    joint_pos_ = Eigen::Map<VecXf>(data + 13, dof_num_);
-                    joint_vel_ = Eigen::Map<VecXf>(data + 13 + dof_num_, dof_num_);
-                    joint_tau_ = Eigen::Map<VecXf>(data + 13 + 2 * dof_num_, dof_num_);
-                } else if (recvLen >= expected_size_with_base_vel) {
-                    std::memcpy(data, buffer + sizeof(double), sizeof(float) * float_count_with_base_vel);
-                    base_height_ = std::numeric_limits<float>::quiet_NaN();
-                    base_lin_vel_ = Eigen::Map<Vec3f>(data, 3);
-                    rpy_ = Eigen::Map<Vec3f>(data + 3, 3);
-                    acc_ = Eigen::Map<Vec3f>(data + 6, 3);
-                    omega_body_ = Eigen::Map<Vec3f>(data + 9, 3);
-                    joint_pos_ = Eigen::Map<VecXf>(data + 12, dof_num_);
-                    joint_vel_ = Eigen::Map<VecXf>(data + 12 + dof_num_, dof_num_);
-                    joint_tau_ = Eigen::Map<VecXf>(data + 12 + 2 * dof_num_, dof_num_);
-                } else {
-                    if (!warned_old_packet) {
-                        std::cerr << "Robot state UDP packet has old layout without base velocity; "
-                                  << "restart mujoco_simulation.py to enable 48-dim policy velocity observation."
-                                  << std::endl;
-                        warned_old_packet = true;
-                    }
-                    std::memcpy(data, buffer + sizeof(double), sizeof(float) * float_count_without_base_vel);
-                    base_height_ = std::numeric_limits<float>::quiet_NaN();
-                    base_lin_vel_ = Vec3f::Zero();
-                    rpy_ = Eigen::Map<Vec3f>(data, 3);
-                    acc_ = Eigen::Map<Vec3f>(data + 3, 3);
-                    omega_body_ = Eigen::Map<Vec3f>(data + 6, 3);
-                    joint_pos_ = Eigen::Map<VecXf>(data + 9, dof_num_);
-                    joint_vel_ = Eigen::Map<VecXf>(data + 9 + dof_num_, dof_num_);
-                    joint_tau_ = Eigen::Map<VecXf>(data + 9 + 2 * dof_num_, dof_num_);
-                }
+                const DecodedRobotStatePacket state =
+                    DecodeRobotStatePacket(buffer, static_cast<std::size_t>(recvLen), dof_num_);
+                run_time_ = state.timestamp;
+                base_height_ = state.base_height;
+                base_lin_vel_ = state.base_lin_vel_body;
+                rpy_ = state.rpy_rad;
+                acc_ = state.proper_acc_body;
+                omega_body_ = state.omega_body;
+                joint_pos_ = state.joint_pos;
+                joint_vel_ = state.joint_vel;
+                joint_tau_ = state.joint_tau;
 
                 // 打印接收到的数据
                 // std::cout << "Received data: " << run_time_ << std::endl;
@@ -261,9 +228,6 @@ namespace interface{
             serverAddr.sin_port = htons(20001); // 服务器端口号
             serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1"); // 服务器IP地址
 
-            float *data=new float[dof_num_*5];
-            std::memset(data, 0, sizeof(float)*5*dof_num_);
-
             while(start_thread_flag_){
                 fds = epoll_wait(efd, evptr, 1, -1);    //阻塞监听，直到有事件发生
                 if(evptr[0].events & EPOLLIN){   
@@ -274,9 +238,8 @@ namespace interface{
                     else{
                     }               
                 }
-                std::memcpy(data, joint_cmd_.data(), sizeof(float)*5*dof_num_);
-
-                sendto(sockfd, data, 5*dof_num_*sizeof(float), 0, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+                const std::vector<char> packet = EncodeJointCommandPacket(joint_cmd_, dof_num_);
+                sendto(sockfd, packet.data(), packet.size(), 0, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
             }
 
             // 关闭套接字

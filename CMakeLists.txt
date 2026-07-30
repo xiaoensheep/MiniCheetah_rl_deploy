@@ -155,6 +155,13 @@ target_include_directories(policy_entry_gate PUBLIC
     ${THIRD_PARTY}/eigen/
 )
 
+add_library(simulation_packet_codec STATIC interface/robot/simulation/simulation_packet_codec.cpp)
+target_include_directories(simulation_packet_codec PUBLIC
+    interface/robot/simulation
+    types
+    ${THIRD_PARTY}/eigen/
+)
+
 # Building the policy runner as a separate library means that editing the
 # policy implementation only recompiles this one translation unit and
 # re-links, without touching the state machine or main.cpp object files.
@@ -176,9 +183,9 @@ add_executable(rl_deploy main.cpp ${STATE_MACHINE_SRC})
 
 # ========== 链接基本库 ==========
 if(BUILD_SIM)
-    target_link_libraries(rl_deploy run_policy policy_entry_gate interface dw -lpthread -lm -lrt -ldl -lstdc++)
+    target_link_libraries(rl_deploy run_policy policy_entry_gate simulation_packet_codec interface dw -lpthread -lm -lrt -ldl -lstdc++)
 else()
-    target_link_libraries(rl_deploy run_policy policy_entry_gate interface -lpthread -lm -lrt -ldl -lstdc++)
+    target_link_libraries(rl_deploy run_policy policy_entry_gate simulation_packet_codec interface -lpthread -lm -lrt -ldl -lstdc++)
 endif()
 
 # if (USE_ONNX)
@@ -231,4 +238,9 @@ if (BUILD_TESTING)
   target_include_directories(policy_entry_gate_test PRIVATE state_machine types ${THIRD_PARTY}/eigen/)
   target_link_libraries(policy_entry_gate_test policy_entry_gate)
   add_test(NAME policy_entry_gate_test COMMAND policy_entry_gate_test)
+
+  add_executable(simulation_packet_codec_test tests/simulation_packet_codec_test.cpp)
+  target_include_directories(simulation_packet_codec_test PRIVATE interface/robot/simulation types ${THIRD_PARTY}/eigen/)
+  target_link_libraries(simulation_packet_codec_test simulation_packet_codec)
+  add_test(NAME simulation_packet_codec_test COMMAND simulation_packet_codec_test)
 endif()
