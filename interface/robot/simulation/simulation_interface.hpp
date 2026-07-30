@@ -33,6 +33,7 @@ namespace interface{
             VecXf joint_pos_, joint_vel_, joint_tau_;
             bool start_thread_flag_ = false;
             std::thread sim_thread_, send_thread_;
+            double last_command_limit_print_time_ = -10000.0;
         public:
         SimulationInterface(const std::string& name, int dof_num=12):RobotInterface(name, dof_num){
             joint_pos_ = VecXf::Zero(dof_num_);
@@ -75,7 +76,17 @@ namespace interface{
         }
         virtual void SetJointCommand(Eigen::Matrix<float, Eigen::Dynamic, 5> input){
             // (current torque, not last torque, video content slip of the tongue)
-            joint_cmd_ = input;
+            const MatXf clamped =
+                ClampJointCommandToLimits(input, MiniCheetahJointCommandLimits(), dof_num_);
+            if (clamped.rows() == input.rows() &&
+                clamped.cols() == input.cols() &&
+                (clamped - input).cwiseAbs().maxCoeff() > 1e-6f &&
+                run_time_ - last_command_limit_print_time_ > 1.0) {
+                std::cout << "[SIM COMMAND LIMIT] clamped joint command to Mini Cheetah deployment limits"
+                          << std::endl;
+                last_command_limit_print_time_ = run_time_;
+            }
+            joint_cmd_ = clamped;
         }
 
         virtual void Start(){
