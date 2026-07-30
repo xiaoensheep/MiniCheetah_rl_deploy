@@ -33,17 +33,6 @@ std::string ResolvePolicyPath() {
     }
     return from_build_dir.lexically_normal().string();
 }
-
-std::string ResolvePolicyMetadataPath() {
-    const std::filesystem::path cwd = GetAbsPath();
-    const std::filesystem::path from_project_root = cwd / "policy/ppo/policy_metadata.json";
-    const std::filesystem::path from_build_dir = cwd / "../policy/ppo/policy_metadata.json";
-
-    if (std::filesystem::exists(from_project_root)) {
-        return from_project_root.lexically_normal().string();
-    }
-    return from_build_dir.lexically_normal().string();
-}
 }
 
 // ---------------------------------------------------------------------------

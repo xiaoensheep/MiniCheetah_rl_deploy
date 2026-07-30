@@ -50,6 +50,7 @@ std::string WriteValidMetadata() {
   "lin_vel_scale": 2.0,
   "omega_scale": 0.25,
   "dof_vel_scale": 0.05,
+  "target_base_height": 0.28,
   "decimation": 12,
   "policy_frequency_hz": 50.0,
   "pd_update_frequency_hz": 1000.0
@@ -113,6 +114,7 @@ void ValidPolicyMetadataLoadsDeploymentContract() {
     ExpectNear(metadata.lin_vel_scale, 2.0f, "lin_vel_scale");
     ExpectNear(metadata.omega_scale, 0.25f, "omega_scale");
     ExpectNear(metadata.dof_vel_scale, 0.05f, "dof_vel_scale");
+    ExpectNear(metadata.target_base_height, 0.28f, "target_base_height");
     Expect(metadata.decimation == 12, "decimation");
     ExpectNear(metadata.policy_frequency_hz, 50.0f, "policy_frequency_hz");
     ExpectNear(metadata.pd_update_frequency_hz, 1000.0f, "pd_update_frequency_hz");

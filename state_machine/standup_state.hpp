@@ -11,19 +11,26 @@
 #pragma once
 
 #include "state_base.h"
+#include "policy_entry_gate.h"
+#include "policy_metadata.h"
 
 class StandUpState : public StateBase{
 private:
     VecXf init_joint_pos_, init_joint_vel_, current_joint_pos_, current_joint_vel_;
-    float time_stamp_record_, run_time_;
+    float time_stamp_record_, run_time_, previous_run_time_, control_dt_;
     VecXf goal_joint_pos_, kp_, kd_;
     MatXf joint_cmd_;
+    PolicyEntryGateConfig policy_entry_gate_config_;
     float stand_duration_ = 2.;
 
     void GetRobotJointValue(){
         current_joint_pos_ = ri_ptr_->GetJointPosition();
         current_joint_vel_ = ri_ptr_->GetJointVelocity();
+        previous_run_time_ = run_time_;
         run_time_ = ri_ptr_->GetInterfaceTimeStamp();
+        if(previous_run_time_ > 0.0f && run_time_ > previous_run_time_){
+            control_dt_ = run_time_ - previous_run_time_;
+        }
     }
 
     void RecordJointData(){
@@ -79,7 +86,12 @@ private:
 public:
     StandUpState(const RobotType& robot_type, const std::string& state_name, 
         std::shared_ptr<ControllerData> data_ptr):StateBase(robot_type, state_name, data_ptr){
-            goal_joint_pos_ = Vec3f(0., GetHipYPosByHeight(cp_ptr_->pre_height_), GetKneePosByHeight(cp_ptr_->pre_height_)).replicate(4, 1);
+            const PolicyMetadata policy_metadata = LoadPolicyMetadata(ResolvePolicyMetadataPath());
+            goal_joint_pos_ = Eigen::Map<const Eigen::VectorXf>(
+                policy_metadata.default_joint_pos.data(), policy_metadata.default_joint_pos.size());
+            policy_entry_gate_config_.default_joint_pos = goal_joint_pos_;
+            policy_entry_gate_config_.target_base_height = policy_metadata.target_base_height;
+            policy_entry_gate_config_.max_control_dt = 1.5f / policy_metadata.pd_update_frequency_hz;
             kp_ = VecXf(12);
             kd_ = VecXf(12);     
             kp_ = cp_ptr_->swing_leg_kp_.replicate(4, 1);
@@ -88,6 +100,10 @@ public:
             joint_cmd_.col(0) = kp_;
             joint_cmd_.col(2) = kd_;
             stand_duration_ = cp_ptr_->stand_duration_;
+            time_stamp_record_ = 0.0f;
+            run_time_ = 0.0f;
+            previous_run_time_ = 0.0f;
+            control_dt_ = 0.0f;
         }
     ~StandUpState(){}
 
@@ -95,6 +111,8 @@ public:
     virtual void OnEnter() {
         GetRobotJointValue();
         RecordJointData();
+        previous_run_time_ = run_time_;
+        control_dt_ = 0.0f;
         StateBase::msfb_.UpdateCurrentState(RobotMotionState::StandingUp);
         uc_ptr_->SetMotionStateFeedback(StateBase::msfb_);
     };
@@ -112,20 +130,8 @@ public:
                                                 run_time_ - time_stamp_record_, stand_duration_);
             }
         }else{
-            float new_time = run_time_ - time_stamp_record_ - stand_duration_;
-            float dt = 0.001;
-            float plan_height = GetCubicSplinePos(cp_ptr_->pre_height_, 0, cp_ptr_->stand_height_, 0, 
-                                                new_time, stand_duration_);
-            float plan_height_next = GetCubicSplinePos(cp_ptr_->pre_height_, 0, cp_ptr_->stand_height_, 0, 
-                                                new_time+dt, stand_duration_);
-            float hipy_pos = GetHipYPosByHeight(plan_height);
-            float hipy_vel = (GetHipYPosByHeight(plan_height_next) - hipy_pos) / dt;
-            float knee_pos = GetKneePosByHeight(plan_height);
-            float knee_vel = (GetKneePosByHeight(plan_height_next) - knee_pos) / dt;
-            planning_joint_pos = Vec3f(0, hipy_pos, knee_pos).replicate(4, 1);
-            planning_joint_vel = Vec3f(0, hipy_vel, knee_vel).replicate(4, 1);
-
-            // std::cout << "planning_pos:  " << planning_joint_pos.transpose() << std::endl;
+            planning_joint_pos = goal_joint_pos_;
+            planning_joint_vel = VecXf::Zero(current_joint_pos_.rows());
         }
 
         joint_cmd_.col(1) = planning_joint_pos;
@@ -141,8 +147,23 @@ public:
             return StateName::kStandUp;
         }else{
             if(uc_ptr_->GetUserCommand().target_mode == int(RobotMotionState::RLControlMode)){
-                return StateName::kRLControl;
-                std::cout << "stand up success" << std::endl;
+                PolicyEntryGateState state;
+                state.joint_pos = current_joint_pos_;
+                state.joint_vel = current_joint_vel_;
+                state.base_rpy = ri_ptr_->GetImuRpy();
+                state.base_lin_vel = ri_ptr_->GetBaseLinearVelocity();
+                state.base_height = ri_ptr_->GetBaseHeight();
+                state.control_dt = control_dt_;
+
+                const PolicyEntryGateResult gate_result =
+                    EvaluatePolicyEntryGate(policy_entry_gate_config_, state);
+                if(gate_result.allowed){
+                    std::cout << "stand up success" << std::endl;
+                    return StateName::kRLControl;
+                }
+                std::cout << "[POLICY ENTRY GATE] refused RLControl: "
+                          << PolicyEntryGateReasonToString(gate_result.reason)
+                          << std::endl;
             }
         }
         return StateName::kStandUp;

@@ -1,6 +1,7 @@
 #include "policy_metadata.h"
 
 #include <fstream>
+#include <filesystem>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
@@ -124,6 +125,7 @@ PolicyMetadata LoadPolicyMetadata(const std::string& path) {
     metadata.lin_vel_scale = LoadFloat(text, "lin_vel_scale");
     metadata.omega_scale = LoadFloat(text, "omega_scale");
     metadata.dof_vel_scale = LoadFloat(text, "dof_vel_scale");
+    metadata.target_base_height = LoadFloat(text, "target_base_height");
     metadata.decimation = LoadInt(text, "decimation");
     metadata.policy_frequency_hz = LoadFloat(text, "policy_frequency_hz");
     metadata.pd_update_frequency_hz = LoadFloat(text, "pd_update_frequency_hz");
@@ -131,4 +133,15 @@ PolicyMetadata LoadPolicyMetadata(const std::string& path) {
     ValidatePolicyMetadata(metadata);
 
     return metadata;
+}
+
+std::string ResolvePolicyMetadataPath() {
+    const std::filesystem::path cwd = std::filesystem::current_path();
+    const std::filesystem::path from_project_root = cwd / "policy/ppo/policy_metadata.json";
+    const std::filesystem::path from_build_dir = cwd / "../policy/ppo/policy_metadata.json";
+
+    if (std::filesystem::exists(from_project_root)) {
+        return from_project_root.lexically_normal().string();
+    }
+    return from_build_dir.lexically_normal().string();
 }

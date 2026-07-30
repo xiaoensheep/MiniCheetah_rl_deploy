@@ -13,9 +13,12 @@ struct PolicyMetadata {
     float lin_vel_scale = 0.0f;
     float omega_scale = 0.0f;
     float dof_vel_scale = 0.0f;
+    float target_base_height = 0.0f;
     int decimation = 0;
     float policy_frequency_hz = 0.0f;
     float pd_update_frequency_hz = 0.0f;
 };
 
 PolicyMetadata LoadPolicyMetadata(const std::string& path);
+
+std::string ResolvePolicyMetadataPath();

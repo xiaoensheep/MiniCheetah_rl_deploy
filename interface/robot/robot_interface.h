@@ -12,6 +12,7 @@
 
 #include "common_types.h"
 #include <atomic>
+#include <limits>
 
 using namespace types;
 
@@ -92,6 +93,13 @@ public:
      */
     virtual Vec3f GetBaseLinearVelocity(){
         return Vec3f::Zero();
+    }
+
+    /**
+     * @brief Get the robot base height in world frame(unit m)
+     */
+    virtual float GetBaseHeight(){
+        return std::numeric_limits<float>::quiet_NaN();
     }
 
     /**

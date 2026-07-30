@@ -23,6 +23,7 @@
   "lin_vel_scale": 2.0,
   "omega_scale": 0.25,
   "dof_vel_scale": 0.05,
+  "target_base_height": 0.28,
   "decimation": 12,
   "policy_frequency_hz": 50.0,
   "pd_update_frequency_hz": 1000.0

@@ -25,6 +25,7 @@ namespace interface{
     class SimulationInterface : public RobotInterface{
         private:
             double run_time_=0;
+            float base_height_ = std::numeric_limits<float>::quiet_NaN();
             Vec3f base_lin_vel_, omega_body_, rpy_, acc_;
             VecXf joint_pos_, joint_vel_, joint_tau_;
             bool start_thread_flag_ = false;
@@ -62,6 +63,9 @@ namespace interface{
         }
         virtual Vec3f GetBaseLinearVelocity() {
             return base_lin_vel_;
+        }
+        virtual float GetBaseHeight() {
+            return base_height_;
         }
         virtual VecXf GetContactForce() {
             return VecXf::Zero(4);
@@ -132,8 +136,10 @@ namespace interface{
             }
 
             // 接收数据
+            const int float_count_with_base_height = 13 + 3 * dof_num_;
             const int float_count_with_base_vel = 12 + 3 * dof_num_;
             const int float_count_without_base_vel = 9 + 3 * dof_num_;
+            const int expected_size_with_base_height = sizeof(double) + sizeof(float) * float_count_with_base_height;
             const int expected_size_with_base_vel = sizeof(double) + sizeof(float) * float_count_with_base_vel;
             const int expected_size_without_base_vel = sizeof(double) + sizeof(float) * float_count_without_base_vel;
             char buffer[1024]={0};
@@ -164,8 +170,19 @@ namespace interface{
                 }
 
                 std::memcpy(&run_time_, buffer, sizeof(double));
-                if (recvLen >= expected_size_with_base_vel) {
+                if (recvLen >= expected_size_with_base_height) {
+                    std::memcpy(data, buffer + sizeof(double), sizeof(float) * float_count_with_base_height);
+                    base_height_ = data[0];
+                    base_lin_vel_ = Eigen::Map<Vec3f>(data + 1, 3);
+                    rpy_ = Eigen::Map<Vec3f>(data + 4, 3);
+                    acc_ = Eigen::Map<Vec3f>(data + 7, 3);
+                    omega_body_ = Eigen::Map<Vec3f>(data + 10, 3);
+                    joint_pos_ = Eigen::Map<VecXf>(data + 13, dof_num_);
+                    joint_vel_ = Eigen::Map<VecXf>(data + 13 + dof_num_, dof_num_);
+                    joint_tau_ = Eigen::Map<VecXf>(data + 13 + 2 * dof_num_, dof_num_);
+                } else if (recvLen >= expected_size_with_base_vel) {
                     std::memcpy(data, buffer + sizeof(double), sizeof(float) * float_count_with_base_vel);
+                    base_height_ = std::numeric_limits<float>::quiet_NaN();
                     base_lin_vel_ = Eigen::Map<Vec3f>(data, 3);
                     rpy_ = Eigen::Map<Vec3f>(data + 3, 3);
                     acc_ = Eigen::Map<Vec3f>(data + 6, 3);
@@ -181,6 +198,7 @@ namespace interface{
                         warned_old_packet = true;
                     }
                     std::memcpy(data, buffer + sizeof(double), sizeof(float) * float_count_without_base_vel);
+                    base_height_ = std::numeric_limits<float>::quiet_NaN();
                     base_lin_vel_ = Vec3f::Zero();
                     rpy_ = Eigen::Map<Vec3f>(data, 3);
                     acc_ = Eigen::Map<Vec3f>(data + 3, 3);

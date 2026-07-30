@@ -106,6 +106,7 @@ class MuJoCoSimulation:
         base_linvel_b = self._base_linear_velocity_body()
 
         print(f"{Fore.CYAN}=== [Debug Info] ==={Style.RESET_ALL}")
+        print(f"{Fore.GREEN}[IMU] Base Height:{Style.RESET_ALL} {self.data.qpos[2]:6.2f}")
         print(f"{Fore.GREEN}[IMU] Lin Vel    :{Style.RESET_ALL} {format_array(base_linvel_b.flatten())}")
         print(f"{Fore.GREEN}[IMU] RPY        :{Style.RESET_ALL} {format_array(rpy.flatten())}")
         print(f"{Fore.GREEN}[IMU] Omega      :{Style.RESET_ALL} {format_array(angvel_b.flatten())}")
@@ -234,6 +235,7 @@ class MuJoCoSimulation:
         angvel_b = self.data.qvel[3:6]
         body_acc = self.body_acc
         base_linvel_b = self._base_linear_velocity_body()
+        base_height = np.array([self.data.qpos[2]], dtype=np.float32)
 
         # Joints
         q = self.data.qpos[7:7+self.dof_num]
@@ -243,6 +245,7 @@ class MuJoCoSimulation:
         # Pack and send
         payload = np.concatenate((
             np.array([self.timestamp], dtype=np.float64),
+            base_height,
             np.asarray(base_linvel_b, dtype=np.float32),
             np.asarray(rpy, dtype=np.float32),
             np.asarray(body_acc, dtype=np.float32),
