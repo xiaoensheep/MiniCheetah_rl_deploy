@@ -108,6 +108,9 @@ MiniCheetahPolicyRunnerONNX::MiniCheetahPolicyRunnerONNX(std::string policy_name
     tmp_action = VecXf::Zero(act_dim_);
     action = VecXf::Zero(act_dim_);
     last_action = VecXf::Zero(act_dim_);
+    last_replay_output_.raw_action = VecXf::Zero(act_dim_);
+    last_replay_output_.clipped_action = VecXf::Zero(act_dim_);
+    last_replay_output_.target_joint_pos = VecXf::Zero(act_dim_);
     transition_start_joint_pos_ = VecXf::Zero(act_dim_);
     ra.goal_joint_pos = VecXf::Zero(act_dim_);
     ra.goal_joint_vel = VecXf::Zero(act_dim_);
@@ -161,6 +164,9 @@ void MiniCheetahPolicyRunnerONNX::OnEnter() {
     run_cnt_ = 0;
     current_obs_.setZero(obs_dim_);
     last_action.setZero(act_dim_);
+    last_replay_output_.raw_action.setZero(act_dim_);
+    last_replay_output_.clipped_action.setZero(act_dim_);
+    last_replay_output_.target_joint_pos.setZero(act_dim_);
     transition_start_recorded_ = false;
     std::cout << "[ONNX ENTER] PolicyRunner entered: " << policy_name_ << std::endl;
 }
@@ -222,6 +228,7 @@ RobotAction MiniCheetahPolicyRunnerONNX::GetRobotAction(const RobotBasicState& r
     VecXf clipped_action = replay_output.clipped_action;
     last_action = clipped_action;
     tmp_action = replay_output.target_joint_pos;
+    last_replay_output_ = replay_output;
 
     if (!transition_start_recorded_) {
         transition_start_joint_pos_ = ro.joint_pos;
@@ -252,6 +259,14 @@ RobotAction MiniCheetahPolicyRunnerONNX::GetRobotAction(const RobotBasicState& r
     ++run_cnt_;
 
     return ra;
+}
+
+const VecXf& MiniCheetahPolicyRunnerONNX::GetLastObservation() const {
+    return current_obs_;
+}
+
+const ReplayPolicyOutput& MiniCheetahPolicyRunnerONNX::GetLastReplayOutput() const {
+    return last_replay_output_;
 }
 
 // ---------------------------------------------------------------------------

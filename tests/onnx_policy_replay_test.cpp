@@ -56,12 +56,47 @@ void OnnxPolicyRunnerRejectsWrongObservationShape() {
     Expect(threw, "wrong observation shape should fail");
 }
 
+types::RobotBasicState MakeStandingRobotState(int action_dim) {
+    types::RobotBasicState state;
+    state.base_rpy = types::Vec3f::Zero();
+    state.base_rot_mat = types::Mat3f::Identity();
+    state.base_lin_vel = types::Vec3f::Zero();
+    state.base_omega = types::Vec3f::Zero();
+    state.base_acc = types::Vec3f(0.0f, 0.0f, types::gravity);
+    state.cmd_vel_normlized = types::Vec3f::Zero();
+    state.joint_pos = types::VecXf::Zero(action_dim);
+    state.joint_vel = types::VecXf::Zero(action_dim);
+    state.joint_tau = types::VecXf::Zero(action_dim);
+    return state;
+}
+
+void OnnxPolicyRunnerExposesLastControlStepForLogging() {
+    const PolicyMetadata metadata = LoadPolicyMetadata(ResolvePolicyMetadataPath());
+    MiniCheetahPolicyRunnerONNX runner("onnx_replay_get_action_test");
+    runner.OnEnter();
+
+    const types::RobotAction action = runner.GetRobotAction(MakeStandingRobotState(metadata.action_dim));
+    const types::VecXf& observation = runner.GetLastObservation();
+    const ReplayPolicyOutput& output = runner.GetLastReplayOutput();
+
+    Expect(observation.size() == metadata.obs_dim, "last observation dimension");
+    Expect(output.raw_action.size() == metadata.action_dim, "last raw action dimension");
+    Expect(output.clipped_action.size() == metadata.action_dim, "last clipped action dimension");
+    Expect(output.target_joint_pos.size() == metadata.action_dim, "last target dimension");
+    Expect(action.goal_joint_pos.size() == metadata.action_dim, "robot action dimension");
+    Expect(IsFinite(observation), "last observation finite");
+    Expect(IsFinite(output.raw_action), "last raw action finite");
+    Expect(IsFinite(output.clipped_action), "last clipped action finite");
+    Expect(IsFinite(output.target_joint_pos), "last target finite");
+}
+
 }  // namespace
 
 int main() {
     try {
         OnnxPolicyRunnerReplaysLoggedObservationShape();
         OnnxPolicyRunnerRejectsWrongObservationShape();
+        OnnxPolicyRunnerExposesLastControlStepForLogging();
     } catch (const std::exception& e) {
         std::cerr << "onnx_policy_replay_test failed: " << e.what() << std::endl;
         return EXIT_FAILURE;

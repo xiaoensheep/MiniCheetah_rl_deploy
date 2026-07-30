@@ -32,3 +32,7 @@ python mujoco_simulation.py
 ```
 
 Keyboard commands: `z` stand up, `c` enter RL control, `wasd` linear command, `q/e` yaw command.
+
+When RL control is entered in simulation builds, structured episode logs are written to
+`logs/sim_episode_*.jsonl`. Override the path with
+`MINI_CHEETAH_EPISODE_LOG=/path/to/file.jsonl`.

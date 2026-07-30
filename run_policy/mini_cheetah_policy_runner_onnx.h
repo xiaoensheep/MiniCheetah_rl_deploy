@@ -31,6 +31,8 @@ public:
     void OnEnter() override;
     RobotAction GetRobotAction(const RobotBasicState& ro) override;
     ReplayPolicyOutput ReplayObservation(const VecXf& observation) override;
+    const VecXf& GetLastObservation() const;
+    const ReplayPolicyOutput& GetLastReplayOutput() const;
 
 private:
     // Hides all onnxruntime types so callers don't need to include
@@ -45,6 +47,7 @@ private:
     int act_dim_ = 0;
 
     VecXf current_obs_;
+    ReplayPolicyOutput last_replay_output_;
     VecXf joint_pos_rl;
     VecXf joint_vel_rl;
     VecXf last_action, tmp_action, action;

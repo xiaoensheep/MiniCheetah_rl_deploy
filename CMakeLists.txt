@@ -89,6 +89,7 @@ include_directories(
   interface/user_command
   state_machine
   run_policy
+  logging
   # ${TORCH_INCLUDE_DIRS}
   ${ONNX_RUNTIME_ROOT}/include
   ${MUJOCO_ROOT}/include
@@ -173,6 +174,15 @@ target_include_directories(offline_replay PUBLIC
 )
 target_link_libraries(offline_replay episode_log)
 
+add_library(episode_log_builder STATIC logging/episode_log_builder.cpp)
+target_include_directories(episode_log_builder PUBLIC
+    logging
+    run_policy
+    types
+    ${THIRD_PARTY}/eigen/
+)
+target_link_libraries(episode_log_builder episode_log)
+
 # Building the policy runner as a separate library means that editing the
 # policy implementation only recompiles this one translation unit and
 # re-links, without touching the state machine or main.cpp object files.
@@ -194,9 +204,9 @@ add_executable(rl_deploy main.cpp ${STATE_MACHINE_SRC})
 
 # ========== 链接基本库 ==========
 if(BUILD_SIM)
-    target_link_libraries(rl_deploy run_policy policy_entry_gate simulation_packet_codec interface dw -lpthread -lm -lrt -ldl -lstdc++)
+    target_link_libraries(rl_deploy run_policy policy_entry_gate simulation_packet_codec episode_log_builder interface dw -lpthread -lm -lrt -ldl -lstdc++)
 else()
-    target_link_libraries(rl_deploy run_policy policy_entry_gate simulation_packet_codec interface -lpthread -lm -lrt -ldl -lstdc++)
+    target_link_libraries(rl_deploy run_policy policy_entry_gate simulation_packet_codec episode_log_builder interface -lpthread -lm -lrt -ldl -lstdc++)
 endif()
 
 # if (USE_ONNX)
@@ -251,6 +261,11 @@ if (BUILD_TESTING)
   target_include_directories(episode_log_test PRIVATE logging types ${THIRD_PARTY}/eigen/)
   target_link_libraries(episode_log_test episode_log)
   add_test(NAME episode_log_test COMMAND episode_log_test)
+
+  add_executable(episode_log_builder_test tests/episode_log_builder_test.cpp)
+  target_include_directories(episode_log_builder_test PRIVATE logging run_policy types ${THIRD_PARTY}/eigen/)
+  target_link_libraries(episode_log_builder_test episode_log_builder)
+  add_test(NAME episode_log_builder_test COMMAND episode_log_builder_test)
 
   add_executable(offline_replay_test tests/offline_replay_test.cpp)
   target_include_directories(offline_replay_test PRIVATE logging run_policy types ${THIRD_PARTY}/eigen/)
