@@ -1,41 +1,62 @@
 """
  * @file pybullet_simulation.py
- * @brief simulation in pybullet
+ * @brief legacy PyBullet simulation entry point
  * @author mazunwang
  * @version 1.0
  * @date 2024-09-11
  * 
  * @copyright Copyright (c) 2024  DeepRobotics
 """
-import pybullet as p
 import numpy as np
-import pybullet_data as pd
 import socket
 import struct
 import threading
 import time
 import os
-from colorama import init, Fore, Style
+try:
+    from colorama import init, Fore, Style
+except ImportError:
+    class _NoColor:
+        RED = GREEN = YELLOW = CYAN = RESET_ALL = ""
+
+    def init(*args, **kwargs):
+        return None
+
+    Fore = _NoColor()
+    Style = _NoColor()
+
+p = None
+pd = None
 
 # Initialize colorama for colored terminal output
 init(autoreset=True)
 urdfPath = {
-"lite3":    "/../../../third_party/deep_robotics_model/Lite3/Lite3_urdf/urdf/Lite3.urdf",
+"mini_cheetah": None,
 }
 
 initJointPos = {
-"lite3":    [0, -1.35453, 2.54948]*4,
+"mini_cheetah":    [0.0, -1.45, 2.35]*4,
 }
 
 class PyBulletSimulation:
 
     def __init__(self, robot_name, local_port=20001, ctrl_ip="127.0.0.1", ctrl_port=30010) -> None:
+        if urdfPath[robot_name] is None:
+            raise RuntimeError(
+                "Mini Cheetah PyBullet backend is not configured. "
+                "Use mujoco_simulation.py for supported Mini Cheetah sim2sim."
+            )
+
         self.localPort = local_port
         self.server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
         self.server.settimeout(5)
         self.ip = ctrl_ip
         self.ctrlAddr = (ctrl_ip, ctrl_port)
         self.robotName = robot_name
+
+        global p, pd
+        import pybullet as p
+        import pybullet_data as pd
 
         p.connect(p.GUI)
         p.setGravity(0, 0, -9.81)
@@ -208,12 +229,8 @@ class PyBulletSimulation:
 
 
 if __name__ == '__main__':
-    ps = PyBulletSimulation("lite3")
+    ps = PyBulletSimulation("mini_cheetah")
     receiveThread = threading.Thread(target=ps.receiveJointCmd)
     receiveThread.start()
     ps.startSimulation()
  
-
-
-
-

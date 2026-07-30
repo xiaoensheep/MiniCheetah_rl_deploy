@@ -5,7 +5,7 @@ We will keep `MiniCheetah_rl_deploy` as the deployment framework and treat Cheet
 ## Considered Options
 
 - Make Cheetah-Software the main framework and embed the ONNX policy runner inside it.
-- Keep the Lite3-style deployment framework as the main framework and implement a Mini Cheetah hardware bridge behind the existing robot interface.
+- Keep this standalone deployment framework as the main framework and implement a Mini Cheetah hardware bridge behind the existing robot interface.
 
 ## Consequences
 

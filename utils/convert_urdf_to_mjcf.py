@@ -1,17 +1,17 @@
-from urdfpy import URDF
-from mujoco import mjcf
-import os
+"""Mini Cheetah model conversion helper.
+
+The supported Mini Cheetah MJCF is already checked in at
+MiniCheetah_description/mjcf/mini_cheetah.xml. Keep this file as the place to
+add a future URDF-to-MJCF workflow if a Mini Cheetah URDF source is introduced.
+"""
+
+from pathlib import Path
 
 
-urdf_path = "../third_party/URDF_model/lite3_urdf/lite3_pybullet/Lite3/urdf/Lite3.urdf"
+MJCF_PATH = Path(__file__).resolve().parents[1] / "MiniCheetah_description" / "mjcf" / "mini_cheetah.xml"
 
-# 加载 URDF 模型
-robot = URDF.load(urdf_path)
 
-# 转换为 MJCF 模型
-mjcf_model = mjcf.from_urdf_model(robot)
-
-# 保存为 MJCF XML 文件
-output_path = "../third_party/URDF_model/lite3_mjcf/lite3_mjcf.xml"
-mjcf_model.save(output_path)
-print(f"Saved MJCF to {output_path}")
+if __name__ == "__main__":
+    if not MJCF_PATH.is_file():
+        raise FileNotFoundError(f"Mini Cheetah MJCF not found: {MJCF_PATH}")
+    print(f"Mini Cheetah MJCF is already available: {MJCF_PATH}")

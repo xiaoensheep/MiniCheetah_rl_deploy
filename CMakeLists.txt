@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(rl_controller)
+project(MiniCheetah_rl_deploy)
 
 set(CMAKE_BUILD_TYPE Release)
 add_definitions(-w) # warning ignore
@@ -10,9 +10,8 @@ include(CTest)
 # ========== 控制选项 ==========
 set(BUILD_PLATFORM "x86" CACHE STRING "select build cpu type")
 option(BUILD_SIM OFF)
-option(USE_RAISIM OFF)
-set(USE_PYBULLET ON)
-set(USE_RAISIM OFF)
+option(USE_UDP_SIM "Use the UDP simulation adapter; supported with Mini Cheetah MuJoCo Python sim2sim" ON)
+option(USE_RAISIM "Legacy simulator option; not validated for Mini Cheetah" OFF)
 option(SEND_REMOTE OFF)
 # option(USE_ONNX "Use ONNXRuntime" ON)
 option(USE_MJCPP "Use Mujoco C++" OFF)
@@ -40,6 +39,7 @@ message("BUILD_SIM:      ${BUILD_SIM}")
 message("SEND_REMOTE:    ${SEND_REMOTE}")
 # message("USE_ONNX:       ${USE_ONNX}")
 message("USE_MJCPP:      ${USE_MJCPP}")
+message("USE_UDP_SIM:    ${USE_UDP_SIM}")
 
 # 路径设置
 get_filename_component(WORKSPACE_DIR ./ ABSOLUTE)
@@ -97,16 +97,11 @@ include_directories(
 # ========== 添加 interface 子模块 ==========
 add_subdirectory(interface)
 
-# ========== 仿真器宏定义 ==========
 if (BUILD_SIM)
-message("USE_PYBULLET:    ${USE_PYBULLET}")
-
   if(USE_RAISIM)
-    add_definitions(-DUSE_RAISIM)
-    set(raisim_DIR "your path to raisim")
-    find_package(raisim CONFIG REQUIRED)
-  elseif(USE_PYBULLET)
-    add_definitions(-DUSE_PYBULLET)
+    message(FATAL_ERROR "USE_RAISIM is a legacy simulator path and is not validated for Mini Cheetah. Use USE_UDP_SIM with mujoco_simulation.py, or USE_MJCPP after validating the C++ MuJoCo interface.")
+  elseif(USE_UDP_SIM)
+    add_definitions(-DUSE_UDP_SIM)
   elseif(USE_MJCPP)
     set(MUJOCO_ROOT "${THIRD_PARTY}/mujoco/${BUILD_PLATFORM}")
     message("USE_MJCPP enabled, loading MuJoCo headers from ${MUJOCO_ROOT}")
@@ -114,7 +109,7 @@ message("USE_PYBULLET:    ${USE_PYBULLET}")
     include_directories(${MUJOCO_ROOT}/include)
     link_directories(${MUJOCO_ROOT}/lib)
   else()
-    message(FATAL_ERROR "No simulation option selected. Please select one of USE_RAISIM, USE_PYBULLET, or USE_MJCPP.")
+    message(FATAL_ERROR "No supported simulation option selected. Use USE_UDP_SIM with mujoco_simulation.py, or USE_MJCPP after validating the C++ MuJoCo interface.")
   endif()
 endif()
 
@@ -215,14 +210,6 @@ endif()
 
 if (BUILD_SIM)
     target_compile_definitions(rl_deploy PRIVATE BUILD_SIMULATION)
-endif()
-
-# Raisim
-if (BUILD_SIM)
-  if(USE_RAISIM)
-    message("build simulation raisim")
-    target_link_libraries(rl_deploy raisim::raisim)
-  endif()
 endif()
 
 if (SEND_REMOTE)

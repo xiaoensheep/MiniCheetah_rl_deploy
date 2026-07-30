@@ -2,119 +2,121 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Agent skills
+## Agent Skills
 
-### Issue tracker
+### Issue Tracker
 
 Issues are tracked in this repo's GitHub Issues using the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
-### Triage labels
+### Triage Labels
 
 This repo uses the default mattpocock/skills triage labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
 
-### Domain docs
+### Domain Docs
 
 This is a single-context repo: read root `CONTEXT.md` and root `docs/adr/` when they exist. See `docs/agents/domain.md`.
 
 ## Project Overview
 
-Lite3 RL Deploy is a reinforcement learning policy deployment framework for the Lite3 quadruped robot. It supports both simulation (PyBullet, MuJoCo) and real hardware execution.
+MiniCheetah_rl_deploy is a reinforcement-learning policy deployment framework for MIT Mini Cheetah replication work. It is being migrated toward a strict sim2sim/sim2real contract:
+
+- MuJoCo simulation and future real hardware must expose the same `RobotInterface` semantics.
+- The ONNX policy runner reads policy metadata from `policy/ppo/policy_metadata.json`.
+- Real hardware is not enabled yet; the Mini Cheetah hardware bridge must be implemented against Cheetah-Software and pass safety contract tests before closed-loop RL is allowed.
 
 ## Build Commands
 
-### Simulation (x86/Ubuntu)
-```bash
-# Install prerequisites (once)
-sudo apt-get install libdw-dev
-wget https://raw.githubusercontent.com/bombela/backward-cpp/master/backward.hpp
-sudo mv backward.hpp /usr/include
-pip install pybullet "numpy < 2.0" mujoco
+### Simulation
 
-# Build
-mkdir build && cd build
-cmake .. -DBUILD_PLATFORM=x86 -DBUILD_SIM=ON -DSEND_REMOTE=OFF
-make -j
+```bash
+cmake -S . -B build_mini -DBUILD_PLATFORM=x86 -DBUILD_SIM=ON -DUSE_UDP_SIM=ON -DSEND_REMOTE=OFF -DBUILD_TESTING=ON
+cmake --build build_mini --target rl_deploy -j2
 ```
 
-### Real Hardware (ARM, run on robot)
+### Tests
+
 ```bash
-mkdir build && cd build
-cmake .. -DBUILD_PLATFORM=arm -DBUILD_SIM=OFF -DSEND_REMOTE=OFF
-make -j
+ctest --test-dir build_mini --output-on-failure
 ```
 
-### CMake Options
-- `-DBUILD_PLATFORM`: `x86` (Ubuntu dev) or `arm` (robot hardware)
-- `-DBUILD_SIM`: `ON` for simulation, `OFF` for real hardware
-- `-DUSE_PYBULLET=ON` / `-DUSE_MJCPP=ON` / `-DUSE_RAISIM=ON`: select simulator
-- `-DSEND_REMOTE=ON`: auto-SCP binary to robot after build
+### Real Hardware
 
-## Running
+Real-hardware build/run is intentionally blocked until the Cheetah-Software bridge exists:
 
-**Simulation requires two terminals:**
 ```bash
-# Terminal 1 — pick one simulator:
-cd interface/robot/simulation && python pybullet_simulation.py
-# or:
-cd interface/robot/simulation && python mujoco_simulation.py
-
-# Terminal 2 — control loop:
-cd build && ./rl_deploy
+cmake -S . -B build_mini -DUSE_CHEETAH_SOFTWARE_BRIDGE=ON
 ```
 
-**Keyboard controls (simulation):** `z` = stand up, `c` = RL control, `wasd` = movement, `qe` = rotation
+That option currently fails fast by design.
 
-**Real hardware:** Connect to robot WiFi (`Lite*******`, password `12345678`), deploy via `scp -r ~/Lite3_rl_deploy ysc@192.168.2.1:~/`, then SSH and run.
+## Running MuJoCo Sim2sim
 
-## Model Conversion (PyTorch → ONNX)
+Simulation uses two terminals.
+
+Terminal 1:
+
 ```bash
-pip install torch numpy onnx onnxruntime
-cd policy/
-python pt2onnx.py   # outputs policy.onnx in same folder
+conda activate mujoco
+cd interface/robot/simulation
+python mujoco_simulation.py
 ```
+
+Terminal 2:
+
+```bash
+./build_mini/rl_deploy
+```
+
+Keyboard controls in simulation:
+
+- `z`: stand up
+- `c`: enter RL control
+- `wasd`: velocity command
+- `q/e`: yaw command
 
 ## Architecture
 
-### State Machine (`state_machine/`)
-The central control loop. States transition linearly: **Idle → StandUp → RLControl → JointDamping → Idle**
+### State Machine
 
-- `state_machine.hpp`: Orchestrates transitions, user input, data streaming
-- `state_base.h`: Abstract base with `Run()`, `OnEnter()`, `OnExit()`, `GetNextStateName()`
-- `rl_control_state_onnx.hpp`: Runs ONNX policy in a separate thread; monitors roll/pitch safety limits (±30°/±45°) and falls back to JointDamping on violation
+The central control loop transitions through:
 
-### Interface Layer (`interface/`)
-Abstracts both robot platforms and user input:
-- **Robot:** `robot_interface.h` (abstract) → `HardwareInterface` (real robot via Lite3 Motion SDK) or `SimulationInterface` (PyBullet via UDP) or `MujocoInterface` (MuJoCo C++)
-- **User input:** `KeyboardInterface` (simulation default), `RetroidGamepadInterface` / `SkydroidGamepadInterface` (hardware default)
-- To switch hardware to keyboard: change `state_machine.hpp:121` to `uc_ptr_ = std::make_shared<KeyboardInterface>();`
+`Idle -> StandUp -> RLControl -> JointDamping -> Idle`
 
-### Policy Runner (`run_policy/`)
-- `policy_runner_base.hpp`: Abstract interface (`GetRobotAction()`, decimation support)
-- `lite3_test_policy_runner_onnx.h` + `.cpp`: Loads `policy/ppo/policy.onnx` via onnxruntime; processes 45-dim observations, outputs joint torques + PD gains. All Ort types are hidden behind a PIMPL struct in the `.cpp` so onnxruntime headers are only parsed by that one translation unit.
+Important files:
 
-### Simulation Communication
-PyBullet/MuJoCo simulators communicate with the control loop over UDP:
-- Port 20001: sensor data (sim → controller)
-- Port 30010: joint commands (controller → sim)
+- `state_machine/state_machine.hpp`: creates robot/user interfaces and states.
+- `state_machine/standup_state.hpp`: moves to the policy default pose before RL entry.
+- `state_machine/policy_entry_gate.*`: validates the initial state contract before RL.
+- `state_machine/rl_control_state_onnx.hpp`: owns the policy control state and posture fallback.
 
-### Timing
-- Main control loop: 2 kHz (500 μs sleep)
-- Policy runner thread: separate thread with 100 μs sleep
-- Simulator timestep: 1 kHz (0.001 s)
+### Interface Layer
 
-### Third-Party Libraries (`third_party/`)
-- `eigen/`: Header-only linear algebra (all math uses `VecXf`, `MatXf`, `Vec3f` Eigen types)
-- `onnxruntime/`: ONNX inference (x86 and aarch64 binaries included)
-- `Lite3_MotionSDK/`: Robot hardware SDK (platform-specific `.so`)
-- `mujoco/`: MuJoCo physics engine (optional)
-- `gamepad/`: Gamepad SDK wrapper
+- `interface/robot/robot_interface.h`: robot-facing contract.
+- `interface/robot/simulation/simulation_interface.hpp`: UDP simulation adapter.
+- `interface/robot/simulation/mujoco_simulation.py`: supported Mini Cheetah MuJoCo simulator.
+- `interface/robot/hardware/hardware_interface.hpp`: Mini Cheetah real-hardware placeholder.
 
-## Key Files for Common Tasks
+### Policy Runner
+
+- `run_policy/mini_cheetah_policy_runner_onnx.h`
+- `run_policy/mini_cheetah_policy_runner_onnx.cpp`
+- `run_policy/policy_metadata.*`
+
+The policy runner loads `policy/ppo/policy.onnx`, checks metadata, builds the observation, runs ONNXRuntime, applies action scaling, and outputs PD target joint positions.
+
+### Contracts And Logs
+
+- `interface/robot/simulation/simulation_packet_codec.*`: canonical UDP packet format and command safety limits.
+- `logging/episode_log.*`: JSONL episode log format for future offline replay.
+- `tests/`: contract tests for metadata, policy entry gate, packet codec, and episode logs.
+
+## Key Files
 
 | Task | File |
 |------|------|
-| Add a new state | Subclass `state_base.h`, register in `state_machine.hpp` |
-| Change policy model | Replace `policy/ppo/policy.onnx`, update obs dims in `run_policy/lite3_test_policy_runner_onnx.cpp` |
-| Add a new simulator | Implement `robot_interface.h` virtual methods |
-| Tune safety limits | `rl_control_state_onnx.hpp` `PostureUnsafeCheck()` |
-| Change control gains | `state_machine/parameters/` config files |
+| Change policy metadata | `policy/ppo/policy_metadata.json` |
+| Change policy runner | `run_policy/mini_cheetah_policy_runner_onnx.cpp` |
+| Tune entry checks | `state_machine/policy_entry_gate.cpp` |
+| Tune stand-up/default pose | `state_machine/parameters/mini_cheetah_control_parameters.cpp` |
+| Inspect simulation packet semantics | `interface/robot/simulation/simulation_packet_codec.cpp` |
+| Add hardware bridge | `interface/robot/hardware/hardware_interface.hpp` |

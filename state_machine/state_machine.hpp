@@ -15,21 +15,12 @@
 #include "standup_state.hpp"
 #include "joint_damping_state.hpp"
 
-// #ifdef USE_ONNX
-//     #include "rl_control_state_onnx.hpp"
-// #else   
-//     #include "rl_control_state.hpp"
-// #endif
-
 #include "rl_control_state_onnx.hpp"
 
 #include "skydroid_gamepad_interface.hpp"
 #include "retroid_gamepad_interface.hpp"
 #include "keyboard_interface.hpp"
-#ifdef USE_RAISIM
-    #include "simulation/jueying_raisim_simulation.hpp"
-#endif
-#ifdef USE_PYBULLET
+#ifdef USE_UDP_SIM
     #include "simulation/simulation_interface.hpp"
 #endif
 
@@ -125,8 +116,6 @@ private:
     }
 public:
     StateMachine(RobotType robot_type){
-        const std::string activation_key = "~/raisim/activation.raisim";
-        std::string urdf_path = "";
         std::string mjcf_path = "";
         #ifdef BUILD_SIMULATION
             uc_ptr_ = std::make_shared<KeyboardInterface>();
@@ -136,16 +125,12 @@ public:
         // uc_ptr_ = std::make_shared<KeyboardInterface>();
         // uc_ptr_ = std::make_shared<RetroidGamepadInterface>(12121);
         if(robot_type == RobotType::MiniCheetah){
-            urdf_path = ResolveProjectPath("MiniCheetah_description/mjcf/mini_cheetah.xml");
             mjcf_path = ResolveProjectPath("MiniCheetah_description/mjcf/mini_cheetah.xml");
-            #ifdef USE_RAISIM
-                ri_ptr_ = std::make_shared<JueyingRaisimSimulation>(activation_key, urdf_path, "MiniCheetah_sim");
-
-            #elif defined(USE_MJCPP)
+            #ifdef USE_MJCPP
                 ri_ptr_ = std::make_shared<MujocoInterface>("MiniCheetah", mjcf_path);
                 std::cout << "Using MujocoInterface CPP " << std::endl;
                 std::cout << "mjcf_path: " << mjcf_path << std::endl;
-            #elif defined(USE_PYBULLET)
+            #elif defined(USE_UDP_SIM)
                 ri_ptr_ = std::make_shared<SimulationInterface>("MiniCheetah");
             #else
                 ri_ptr_ = std::make_shared<HardwareInterface>("MiniCheetah");
@@ -165,16 +150,7 @@ public:
         idle_controller_ = std::make_shared<IdleState>(robot_type, "idle_state", data_ptr);
         standup_controller_ = std::make_shared<StandUpState>(robot_type, "standup_state", data_ptr);
 
-        // 测试ONNX，后续需要改成参数控制
-        // rl_controller_ = std::make_shared<RLControlState>(robot_type, "rl_control", data_ptr);
-        // #ifdef USE_ONNX
-        //     rl_controller_ = std::make_shared<RLControlStateONNX>(robot_type, "rl_control", data_ptr);
-        // #else
-        //     rl_controller_ = std::make_shared<RLControlState>(robot_type, "rl_control", data_ptr);
-        // #endif
         rl_controller_ = std::make_shared<RLControlStateONNX>(robot_type, "rl_control", data_ptr);
-        
-
 
         joint_damping_controller_ = std::make_shared<JointDampingState>(robot_type, "joint_damping", data_ptr);
 

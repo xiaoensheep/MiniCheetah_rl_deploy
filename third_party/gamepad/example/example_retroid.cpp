@@ -42,7 +42,7 @@ std::ostream& operator<<(std::ostream& o, RetroidGamepad& is){
   std::string  s = fmt::format(
 	"┌{0:─^{1}}┐\n"
 	"│{2: ^{1}}│\n"
-	"└{0:─^{1}}┘\n", "", 86 ,"Joystick Device: Retroid(Lite3)");
+	"└{0:─^{1}}┘\n", "", 86 ,"Joystick Device: Retroid");
   o<<s ;
   s = fmt::format(
     "┌{2:─^{1}}┐┌{3:─^{1}}┐┌{4:─^{1}}┐┌{5:─^{1}}┐\n"

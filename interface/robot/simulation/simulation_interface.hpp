@@ -1,6 +1,6 @@
 /**
  * @file simulation_interface.hpp
- * @brief communicate with pybullet
+ * @brief UDP simulation adapter for the Mini Cheetah deployment interface
  * @author mazunwang
  * @version 1.0
  * @date 2024-09-11

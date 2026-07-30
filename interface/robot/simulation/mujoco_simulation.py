@@ -78,7 +78,7 @@ class MuJoCoSimulation:
             self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
 
     def _set_initial_pose(self, key: str):
-        """Set joint positions to match PyBullet initial angles."""
+        """Set joint positions to the Mini Cheetah simulation default pose."""
         qpos0 = self.data.qpos.copy()
         qpos0[2] = 0.10
         qpos0[3:7] = np.array([1.0, 0.0, 0.0, 0.0])

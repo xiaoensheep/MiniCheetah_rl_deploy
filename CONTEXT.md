@@ -88,8 +88,8 @@ _Avoid_: fake robot, sim-only interface
 A simulation backend that the project actively validates against the Deployment Interface Contract.
 _Avoid_: available simulator, legacy backend
 
-**Legacy Lite3 Path**:
-Code, documentation, assets, build options, or debug output inherited from Lite3_rl_deploy that has not been revalidated for Mini Cheetah.
+**Legacy Source Path**:
+Code, documentation, assets, build options, or debug output inherited from the source project that has not been revalidated for Mini Cheetah.
 _Avoid_: supported fallback, old option
 
 **Contract Test**:
