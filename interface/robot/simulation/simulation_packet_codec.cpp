@@ -1,5 +1,6 @@
 #include "simulation_packet_codec.h"
 
+#include <cmath>
 #include <cstring>
 #include <stdexcept>
 
@@ -29,6 +30,17 @@ const std::vector<std::string>& CanonicalJointOrder() {
         "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint",
         "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint"};
     return joint_order;
+}
+
+JointCommandLimits MiniCheetahJointCommandLimits() {
+    JointCommandLimits limits;
+    limits.position_lower = types::Vec3f(-1.60f, -2.60f, -2.60f).replicate(4, 1);
+    limits.position_upper = types::Vec3f(1.60f, 2.60f, 2.60f).replicate(4, 1);
+    limits.velocity_abs_max = types::Vec3f(30.0f, 30.0f, 20.0f).replicate(4, 1);
+    limits.kp_max = types::VecXf::Constant(12, 80.0f);
+    limits.kd_max = types::VecXf::Constant(12, 5.0f);
+    limits.feedforward_torque_abs_max = types::Vec3f(17.0f, 17.0f, 26.0f).replicate(4, 1);
+    return limits;
 }
 
 std::size_t RobotStatePacketSize(int dof_num) {
@@ -80,8 +92,10 @@ std::vector<char> EncodeJointCommandPacket(
     const types::MatXf& command,
     int dof_num) {
     RequireCanonicalDofCount(dof_num);
-    if (command.rows() != dof_num || command.cols() != kJointCommandColumnCount) {
-        throw std::runtime_error("Joint command matrix shape must be dof_num x 5");
+    const JointCommandLimitResult limit_result =
+        ValidateJointCommandLimits(command, MiniCheetahJointCommandLimits(), dof_num);
+    if (!limit_result.valid) {
+        throw std::runtime_error("Joint command violates Mini Cheetah deployment interface limits");
     }
 
     std::vector<char> packet(JointCommandPacketSize(dof_num));
@@ -102,4 +116,111 @@ types::VecXf ComputePdCommandTorque(
     return command.col(kJointCommandKp).cwiseProduct(command.col(kJointCommandPosition) - joint_pos) +
            command.col(kJointCommandKd).cwiseProduct(command.col(kJointCommandVelocity) - joint_vel) +
            command.col(kJointCommandFeedForwardTorque);
+}
+
+namespace {
+
+JointCommandLimitResult InvalidResult(JointCommandLimitReason reason, int joint_index, int column) {
+    JointCommandLimitResult result;
+    result.valid = false;
+    result.reason = reason;
+    result.joint_index = joint_index;
+    result.column = column;
+    return result;
+}
+
+bool IsFinite(float value) {
+    return std::isfinite(value);
+}
+
+bool LimitsHaveCanonicalSize(const JointCommandLimits& limits, int dof_num) {
+    return limits.position_lower.size() == dof_num &&
+           limits.position_upper.size() == dof_num &&
+           limits.velocity_abs_max.size() == dof_num &&
+           limits.kp_max.size() == dof_num &&
+           limits.kd_max.size() == dof_num &&
+           limits.feedforward_torque_abs_max.size() == dof_num;
+}
+
+}  // namespace
+
+JointCommandLimitResult ValidateJointCommandLimits(
+    const types::MatXf& command,
+    const JointCommandLimits& limits,
+    int dof_num) {
+    RequireCanonicalDofCount(dof_num);
+    if (command.rows() != dof_num ||
+        command.cols() != kJointCommandColumnCount ||
+        !LimitsHaveCanonicalSize(limits, dof_num)) {
+        return InvalidResult(JointCommandLimitReason::kShape, -1, -1);
+    }
+
+    for (int joint = 0; joint < dof_num; ++joint) {
+        for (int column = 0; column < kJointCommandColumnCount; ++column) {
+            if (!IsFinite(command(joint, column))) {
+                return InvalidResult(JointCommandLimitReason::kNonFinite, joint, column);
+            }
+        }
+        if (command(joint, kJointCommandPosition) < limits.position_lower(joint) ||
+            command(joint, kJointCommandPosition) > limits.position_upper(joint)) {
+            return InvalidResult(JointCommandLimitReason::kPositionLimit, joint, kJointCommandPosition);
+        }
+        if (std::fabs(command(joint, kJointCommandVelocity)) > limits.velocity_abs_max(joint)) {
+            return InvalidResult(JointCommandLimitReason::kVelocityLimit, joint, kJointCommandVelocity);
+        }
+        if (command(joint, kJointCommandKp) < 0.0f ||
+            command(joint, kJointCommandKp) > limits.kp_max(joint)) {
+            return InvalidResult(JointCommandLimitReason::kKpLimit, joint, kJointCommandKp);
+        }
+        if (command(joint, kJointCommandKd) < 0.0f ||
+            command(joint, kJointCommandKd) > limits.kd_max(joint)) {
+            return InvalidResult(JointCommandLimitReason::kKdLimit, joint, kJointCommandKd);
+        }
+        if (std::fabs(command(joint, kJointCommandFeedForwardTorque)) >
+            limits.feedforward_torque_abs_max(joint)) {
+            return InvalidResult(
+                JointCommandLimitReason::kFeedForwardTorqueLimit,
+                joint,
+                kJointCommandFeedForwardTorque);
+        }
+    }
+
+    JointCommandLimitResult result;
+    result.valid = true;
+    result.reason = JointCommandLimitReason::kValid;
+    return result;
+}
+
+types::MatXf BuildJointDampingCommand(
+    const types::VecXf& kd,
+    int dof_num) {
+    RequireCanonicalDofCount(dof_num);
+    if (kd.size() != dof_num) {
+        throw std::runtime_error("Damping command kd must match canonical 12-DOF joint order");
+    }
+
+    types::MatXf command = types::MatXf::Zero(dof_num, kJointCommandColumnCount);
+    command.col(kJointCommandKd) = kd;
+    const JointCommandLimitResult limit_result =
+        ValidateJointCommandLimits(command, MiniCheetahJointCommandLimits(), dof_num);
+    if (!limit_result.valid) {
+        throw std::runtime_error("Damping command violates Mini Cheetah deployment interface limits");
+    }
+    return command;
+}
+
+bool IsDampingCommand(
+    const types::MatXf& command,
+    int dof_num) {
+    if (dof_num != static_cast<int>(CanonicalJointOrder().size())) {
+        return false;
+    }
+    if (command.rows() != dof_num || command.cols() != kJointCommandColumnCount) {
+        return false;
+    }
+    return command.col(kJointCommandKp).isZero(1e-6f) &&
+           command.col(kJointCommandPosition).isZero(1e-6f) &&
+           (command.col(kJointCommandKd).array() > 0.0f).all() &&
+           command.col(kJointCommandVelocity).isZero(1e-6f) &&
+           command.col(kJointCommandFeedForwardTorque).isZero(1e-6f);
 }

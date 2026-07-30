@@ -4,6 +4,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -160,13 +161,13 @@ void RobotStatePacketRejectsNonCanonicalDofCount() {
 
 void JointCommandPacketEncodesDeploymentInterfaceContractColumns() {
     const int dof_num = 12;
-    types::MatXf command(dof_num, 5);
+    types::MatXf command(dof_num, kJointCommandColumnCount);
     for (int i = 0; i < dof_num; ++i) {
         command(i, kJointCommandKp) = 10.0f + i;
-        command(i, kJointCommandPosition) = 20.0f + i;
-        command(i, kJointCommandKd) = 30.0f + i;
-        command(i, kJointCommandVelocity) = 40.0f + i;
-        command(i, kJointCommandFeedForwardTorque) = 50.0f + i;
+        command(i, kJointCommandPosition) = 0.01f * static_cast<float>(i);
+        command(i, kJointCommandKd) = 1.0f + 0.1f * static_cast<float>(i);
+        command(i, kJointCommandVelocity) = 0.2f + 0.01f * static_cast<float>(i);
+        command(i, kJointCommandFeedForwardTorque) = 0.3f + 0.01f * static_cast<float>(i);
     }
 
     const std::vector<char> packet = EncodeJointCommandPacket(command, dof_num);
@@ -177,14 +178,14 @@ void JointCommandPacketEncodesDeploymentInterfaceContractColumns() {
 
     ExpectNear(values[0], 10.0f, "kp[0]");
     ExpectNear(values[11], 21.0f, "kp[11]");
-    ExpectNear(values[12], 20.0f, "q_des[0]");
-    ExpectNear(values[23], 31.0f, "q_des[11]");
-    ExpectNear(values[24], 30.0f, "kd[0]");
-    ExpectNear(values[35], 41.0f, "kd[11]");
-    ExpectNear(values[36], 40.0f, "dq_des[0]");
-    ExpectNear(values[47], 51.0f, "dq_des[11]");
-    ExpectNear(values[48], 50.0f, "tau_ff[0]");
-    ExpectNear(values[59], 61.0f, "tau_ff[11]");
+    ExpectNear(values[12], 0.0f, "q_des[0]");
+    ExpectNear(values[23], 0.11f, "q_des[11]");
+    ExpectNear(values[24], 1.0f, "kd[0]");
+    ExpectNear(values[35], 2.1f, "kd[11]");
+    ExpectNear(values[36], 0.2f, "dq_des[0]");
+    ExpectNear(values[47], 0.31f, "dq_des[11]");
+    ExpectNear(values[48], 0.3f, "tau_ff[0]");
+    ExpectNear(values[59], 0.41f, "tau_ff[11]");
 }
 
 void JointCommandPacketComputesPdCommandSemantics() {
@@ -221,6 +222,115 @@ void JointCommandPacketRejectsWrongShape() {
     Expect(rejected, "wrong-shape joint command matrix should be rejected");
 }
 
+types::MatXf SafeStandingCommand() {
+    const int dof_num = 12;
+    types::MatXf command = types::MatXf::Zero(dof_num, kJointCommandColumnCount);
+    for (int i = 0; i < dof_num; ++i) {
+        command(i, kJointCommandKp) = 20.0f;
+        command(i, kJointCommandKd) = 1.0f;
+        command(i, kJointCommandVelocity) = 0.0f;
+        command(i, kJointCommandFeedForwardTorque) = 0.0f;
+    }
+    command.col(kJointCommandPosition) =
+        types::Vec3f(0.0f, -0.8f, 1.6f).replicate(4, 1);
+    return command;
+}
+
+void JointCommandLimitsAcceptSafeCommand() {
+    const JointCommandLimitResult result =
+        ValidateJointCommandLimits(SafeStandingCommand(), MiniCheetahJointCommandLimits(), 12);
+
+    Expect(result.valid, "safe standing command should satisfy Mini Cheetah command limits");
+    Expect(result.reason == JointCommandLimitReason::kValid, "safe command limit reason");
+}
+
+void JointCommandLimitsRejectEachUnsafeColumn() {
+    const JointCommandLimits limits = MiniCheetahJointCommandLimits();
+
+    types::MatXf command = SafeStandingCommand();
+    command(0, kJointCommandPosition) = 2.0f;
+    JointCommandLimitResult result = ValidateJointCommandLimits(command, limits, 12);
+    Expect(!result.valid, "unsafe position should be rejected");
+    Expect(result.reason == JointCommandLimitReason::kPositionLimit, "position limit reason");
+
+    command = SafeStandingCommand();
+    command(2, kJointCommandVelocity) = 25.0f;
+    result = ValidateJointCommandLimits(command, limits, 12);
+    Expect(!result.valid, "unsafe velocity should be rejected");
+    Expect(result.reason == JointCommandLimitReason::kVelocityLimit, "velocity limit reason");
+
+    command = SafeStandingCommand();
+    command(0, kJointCommandKp) = 100.0f;
+    result = ValidateJointCommandLimits(command, limits, 12);
+    Expect(!result.valid, "unsafe kp should be rejected");
+    Expect(result.reason == JointCommandLimitReason::kKpLimit, "kp limit reason");
+
+    command = SafeStandingCommand();
+    command(0, kJointCommandKp) = -1.0f;
+    result = ValidateJointCommandLimits(command, limits, 12);
+    Expect(!result.valid, "negative kp should be rejected");
+    Expect(result.reason == JointCommandLimitReason::kKpLimit, "negative kp limit reason");
+
+    command = SafeStandingCommand();
+    command(0, kJointCommandKd) = 10.0f;
+    result = ValidateJointCommandLimits(command, limits, 12);
+    Expect(!result.valid, "unsafe kd should be rejected");
+    Expect(result.reason == JointCommandLimitReason::kKdLimit, "kd limit reason");
+
+    command = SafeStandingCommand();
+    command(0, kJointCommandKd) = -1.0f;
+    result = ValidateJointCommandLimits(command, limits, 12);
+    Expect(!result.valid, "negative kd should be rejected");
+    Expect(result.reason == JointCommandLimitReason::kKdLimit, "negative kd limit reason");
+
+    command = SafeStandingCommand();
+    command(2, kJointCommandFeedForwardTorque) = 30.0f;
+    result = ValidateJointCommandLimits(command, limits, 12);
+    Expect(!result.valid, "unsafe feedforward torque should be rejected");
+    Expect(result.reason == JointCommandLimitReason::kFeedForwardTorqueLimit, "torque limit reason");
+
+    command = SafeStandingCommand();
+    command(0, kJointCommandPosition) = std::numeric_limits<float>::quiet_NaN();
+    result = ValidateJointCommandLimits(command, limits, 12);
+    Expect(!result.valid, "non-finite command should be rejected");
+    Expect(result.reason == JointCommandLimitReason::kNonFinite, "non-finite limit reason");
+}
+
+void JointDampingCommandHasSafeFallbackSemantics() {
+    const types::VecXf kd = types::VecXf::Ones(12);
+    const types::MatXf damping = BuildJointDampingCommand(kd, 12);
+
+    Expect(IsDampingCommand(damping, 12), "damping command should be recognized as fallback");
+    ExpectNear(damping.col(kJointCommandKp).norm(), 0.0f, "damping kp zero");
+    ExpectNear(damping.col(kJointCommandPosition).norm(), 0.0f, "damping q_des zero");
+    ExpectNear((damping.col(kJointCommandKd) - kd).norm(), 0.0f, "damping kd");
+    ExpectNear(damping.col(kJointCommandVelocity).norm(), 0.0f, "damping dq_des zero");
+    ExpectNear(damping.col(kJointCommandFeedForwardTorque).norm(), 0.0f, "damping tau_ff zero");
+    Expect(ValidateJointCommandLimits(damping, MiniCheetahJointCommandLimits(), 12).valid,
+           "damping command should satisfy limits");
+}
+
+void JointDampingCommandRejectsUnsafeFallbackInputs() {
+    bool rejected = false;
+    try {
+        BuildJointDampingCommand(types::VecXf::Constant(12, -1.0f), 12);
+    } catch (const std::exception&) {
+        rejected = true;
+    }
+    Expect(rejected, "negative damping kd should be rejected");
+
+    rejected = false;
+    try {
+        BuildJointDampingCommand(types::VecXf::Constant(12, 10.0f), 12);
+    } catch (const std::exception&) {
+        rejected = true;
+    }
+    Expect(rejected, "over-limit damping kd should be rejected");
+
+    Expect(!IsDampingCommand(types::MatXf::Ones(6, kJointCommandColumnCount), 6),
+           "non-canonical damping command should not be recognized");
+}
+
 }  // namespace
 
 int main() {
@@ -234,6 +344,10 @@ int main() {
         JointCommandPacketEncodesDeploymentInterfaceContractColumns();
         JointCommandPacketComputesPdCommandSemantics();
         JointCommandPacketRejectsWrongShape();
+        JointCommandLimitsAcceptSafeCommand();
+        JointCommandLimitsRejectEachUnsafeColumn();
+        JointDampingCommandHasSafeFallbackSemantics();
+        JointDampingCommandRejectsUnsafeFallbackInputs();
     } catch (const std::exception& e) {
         std::cerr << "simulation_packet_codec_test failed: " << e.what() << std::endl;
         return EXIT_FAILURE;
