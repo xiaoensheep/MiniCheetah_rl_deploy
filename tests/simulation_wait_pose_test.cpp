@@ -45,10 +45,22 @@ void CrouchPoseUsesCanonicalMiniCheetahOrder() {
         throw std::runtime_error("crouch joint pose size");
     }
 
-    for (int leg = 0; leg < 4; ++leg) {
-        ExpectNear(joint_pos(3 * leg), 0.0f, "hip crouch position");
-        ExpectNear(joint_pos(3 * leg + 1), -1.45f, "thigh crouch position");
-        ExpectNear(joint_pos(3 * leg + 2), 2.35f, "calf crouch position");
+    const float expected_positions[12] = {
+        -0.12319f,
+        -1.54732f,
+        2.60066f,
+        0.116436f,
+        -1.5563f,
+        2.61816f,
+        -0.0559533f,
+        -1.50758f,
+        2.46631f,
+        0.0480561f,
+        -1.5152f,
+        2.48509f,
+    };
+    for (int i = 0; i < 12; ++i) {
+        ExpectNear(joint_pos(i), expected_positions[i], "crouch keyframe joint position");
     }
 }
 
@@ -60,16 +72,30 @@ void CrouchHoldCommandUsesPdPositionHold() {
     if (command.rows() != 12 || command.cols() != 5) {
         throw std::runtime_error("crouch hold command shape");
     }
+    const float expected_positions[12] = {
+        -0.12319f,
+        -1.54732f,
+        2.60066f,
+        0.116436f,
+        -1.5563f,
+        2.61816f,
+        -0.0559533f,
+        -1.50758f,
+        2.46631f,
+        0.0480561f,
+        -1.5152f,
+        2.48509f,
+    };
     for (int leg = 0; leg < 4; ++leg) {
         ExpectNear(command(3 * leg, 0), kp(0), "hip kp");
         ExpectNear(command(3 * leg + 1, 0), kp(1), "thigh kp");
         ExpectNear(command(3 * leg + 2, 0), kp(2), "calf kp");
-        ExpectNear(command(3 * leg, 1), 0.0f, "hip q_des");
-        ExpectNear(command(3 * leg + 1, 1), -1.45f, "thigh q_des");
-        ExpectNear(command(3 * leg + 2, 1), 2.35f, "calf q_des");
         ExpectNear(command(3 * leg, 2), kd(0), "hip kd");
         ExpectNear(command(3 * leg + 1, 2), kd(1), "thigh kd");
         ExpectNear(command(3 * leg + 2, 2), kd(2), "calf kd");
+    }
+    for (int i = 0; i < 12; ++i) {
+        ExpectNear(command(i, 1), expected_positions[i], "crouch keyframe q_des");
     }
     if (command.col(3).norm() > 1e-6f || command.col(4).norm() > 1e-6f) {
         throw std::runtime_error("crouch hold command velocity and torque feedforward");

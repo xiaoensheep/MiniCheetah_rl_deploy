@@ -1,6 +1,6 @@
 # Use a MuJoCo Crouch Wait Pose Before Stand-Up
 
-MuJoCo sim2sim should start Mini Cheetah in a low crouch wait pose, not in the policy stand pose. The simulator and simulation `IdleState` may actively hold this crouch pose before the user requests stand-up.
+MuJoCo sim2sim should start Mini Cheetah in the prepared crouch keyframe, not in the policy stand pose. The simulator and simulation `IdleState` may actively hold this keyframe before the user requests stand-up.
 
 This is a simulation startup convenience, not the policy initial state. Pressing `z` still transitions through `StandUpState`, whose target remains the policy metadata default joint pose. RL entry checks still happen after stand-up.
 

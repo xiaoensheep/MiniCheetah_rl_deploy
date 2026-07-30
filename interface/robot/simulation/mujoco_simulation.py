@@ -13,8 +13,11 @@ from mujoco_sim_config import (
     DEFAULT_INITIAL_POSE,
     STARTUP_HOLD_KD,
     STARTUP_HOLD_KP,
+    initial_base_pos,
+    initial_base_quat,
     initial_base_height,
     initial_joint_pose,
+    initial_qvel,
     load_policy_sim_defaults,
     project_root_from_sim_file,
 )
@@ -100,13 +103,14 @@ class MuJoCoSimulation:
     def _set_initial_pose(self, key: str):
         """Set joint positions to the Mini Cheetah simulation default pose."""
         qpos0 = self.data.qpos.copy()
-        qpos0[2] = initial_base_height(self.initial_pose, self.policy_defaults)
-        qpos0[3:7] = np.array([1.0, 0.0, 0.0, 0.0])
+        qpos0[0:3] = np.array(initial_base_pos(self.initial_pose, self.policy_defaults), dtype=np.float32)
+        qpos0[3:7] = np.array(initial_base_quat(self.initial_pose), dtype=np.float32)
         qpos0[7:7+self.dof_num] = np.array(
             initial_joint_pose(self.initial_pose, self.policy_defaults),
             dtype=np.float32,
         )
         self.data.qpos[:] = qpos0
+        self.data.qvel[:] = np.array(initial_qvel(self.initial_pose, self.dof_num), dtype=np.float32)
         mujoco.mj_forward(self.model, self.data)
 
     def print_debug_info(self):

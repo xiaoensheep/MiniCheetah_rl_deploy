@@ -7,11 +7,17 @@ from pathlib import Path
 from interface.robot.simulation.mujoco_sim_config import (
     CANONICAL_JOINT_ORDER,
     CROUCH_JOINT_POS,
+    CROUCH_BASE_POS,
+    CROUCH_BASE_QUAT,
+    CROUCH_QVEL,
     DEFAULT_INITIAL_POSE,
     STARTUP_HOLD_KD,
     STARTUP_HOLD_KP,
+    initial_base_pos,
+    initial_base_quat,
     initial_base_height,
     initial_joint_pose,
+    initial_qvel,
     load_policy_sim_defaults,
 )
 
@@ -61,7 +67,10 @@ def test_crouch_pose_is_available_for_manual_debugging():
         defaults = load_policy_sim_defaults(root)
 
         expect(initial_joint_pose("crouch", defaults) == CROUCH_JOINT_POS, "crouch joint pose")
-        expect(abs(initial_base_height("crouch", defaults) - 0.10) < 1e-6, "crouch height")
+        expect(initial_base_pos("crouch", defaults) == CROUCH_BASE_POS, "crouch base position")
+        expect(initial_base_quat("crouch") == CROUCH_BASE_QUAT, "crouch base quaternion")
+        expect(initial_qvel("crouch", 12) == CROUCH_QVEL, "crouch qvel")
+        expect(abs(initial_base_height("crouch", defaults) - 0.096633) < 1e-6, "crouch height")
 
 
 def test_default_initial_pose_is_crouch_waiting_pose():

@@ -13,18 +13,18 @@ struct NamedJointPosition {
 
 inline const std::array<NamedJointPosition, 12>& MiniCheetahCrouchJointPoseEntries() {
     static const std::array<NamedJointPosition, 12> joint_pose = {{
-        {"FR_hip_joint", 0.0f},
-        {"FR_thigh_joint", -1.45f},
-        {"FR_calf_joint", 2.35f},
-        {"FL_hip_joint", 0.0f},
-        {"FL_thigh_joint", -1.45f},
-        {"FL_calf_joint", 2.35f},
-        {"RR_hip_joint", 0.0f},
-        {"RR_thigh_joint", -1.45f},
-        {"RR_calf_joint", 2.35f},
-        {"RL_hip_joint", 0.0f},
-        {"RL_thigh_joint", -1.45f},
-        {"RL_calf_joint", 2.35f},
+        {"FR_hip_joint", -0.12319f},
+        {"FR_thigh_joint", -1.54732f},
+        {"FR_calf_joint", 2.60066f},
+        {"FL_hip_joint", 0.116436f},
+        {"FL_thigh_joint", -1.5563f},
+        {"FL_calf_joint", 2.61816f},
+        {"RR_hip_joint", -0.0559533f},
+        {"RR_thigh_joint", -1.50758f},
+        {"RR_calf_joint", 2.46631f},
+        {"RL_hip_joint", 0.0480561f},
+        {"RL_thigh_joint", -1.5152f},
+        {"RL_calf_joint", 2.48509f},
     }};
     return joint_pose;
 }

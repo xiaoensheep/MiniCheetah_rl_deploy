@@ -18,20 +18,42 @@ CANONICAL_JOINT_ORDER = [
     "RL_calf_joint",
 ]
 CROUCH_JOINT_POS = [
-    0.0,
-    -1.45,
-    2.35,
-    0.0,
-    -1.45,
-    2.35,
-    0.0,
-    -1.45,
-    2.35,
-    0.0,
-    -1.45,
-    2.35,
+    -0.12319,
+    -1.54732,
+    2.60066,
+    0.116436,
+    -1.5563,
+    2.61816,
+    -0.0559533,
+    -1.50758,
+    2.46631,
+    0.0480561,
+    -1.5152,
+    2.48509,
 ]
-CROUCH_BASE_HEIGHT = 0.10
+CROUCH_BASE_POS = [-0.000623329, 0.00176311, 0.096633]
+CROUCH_BASE_QUAT = [0.999062, -0.00688532, 0.0427483, 0.000266976]
+CROUCH_QVEL = [
+    -1.36518e-05,
+    -2.74203e-07,
+    1.16291e-06,
+    2.13922e-06,
+    -2.4024e-05,
+    6.34784e-05,
+    -4.51138e-05,
+    5.44215e-05,
+    -1.9761e-05,
+    0.000155157,
+    0.00182489,
+    0.000552896,
+    9.23184e-05,
+    -3.32965e-05,
+    6.74106e-05,
+    0.000101832,
+    0.000103856,
+    3.24305e-05,
+]
+CROUCH_BASE_HEIGHT = CROUCH_BASE_POS[2]
 DEFAULT_INITIAL_POSE = "crouch"
 STARTUP_HOLD_KP = 40.0
 STARTUP_HOLD_KD = 1.0
@@ -107,4 +129,30 @@ def initial_base_height(initial_pose: str, defaults: PolicySimDefaults) -> float
         return defaults.target_base_height
     if initial_pose == "crouch":
         return CROUCH_BASE_HEIGHT
+    raise ValueError(f"Unsupported Mini Cheetah initial pose: {initial_pose}")
+
+
+def initial_base_pos(initial_pose: str, defaults: PolicySimDefaults) -> list[float]:
+    if initial_pose == "stand":
+        return [0.0, 0.0, defaults.target_base_height]
+    if initial_pose == "crouch":
+        return CROUCH_BASE_POS
+    raise ValueError(f"Unsupported Mini Cheetah initial pose: {initial_pose}")
+
+
+def initial_base_quat(initial_pose: str) -> list[float]:
+    if initial_pose == "stand":
+        return [1.0, 0.0, 0.0, 0.0]
+    if initial_pose == "crouch":
+        return CROUCH_BASE_QUAT
+    raise ValueError(f"Unsupported Mini Cheetah initial pose: {initial_pose}")
+
+
+def initial_qvel(initial_pose: str, dof_num: int) -> list[float]:
+    if initial_pose == "stand":
+        return [0.0] * (6 + dof_num)
+    if initial_pose == "crouch":
+        if len(CROUCH_QVEL) != 6 + dof_num:
+            raise ValueError("Mini Cheetah crouch qvel must match MuJoCo velocity dimension")
+        return CROUCH_QVEL
     raise ValueError(f"Unsupported Mini Cheetah initial pose: {initial_pose}")
