@@ -2,6 +2,7 @@
 
 #include "user_command_interface.h"
 #include "custom_types.h"
+#include <cctype>
 #include <cstdio>
 #include <functional>
 #include <termios.h>
@@ -78,50 +79,56 @@ public:
         while (start_thread_flag_) {
             const ssize_t read_size = read(STDIN_FILENO, &input, 1);
             if(read_size == 1){
+                const char key = static_cast<char>(std::tolower(static_cast<unsigned char>(input)));
                 double current_time = GetCurrentTimeStamp();
                 // std::lock_guard<std::mutex> lock(mtx_);  // 修改 usr_cmd_ 和读取 msfb_
 
                 std::cout << "input: " << input << std::endl;
-                if(input == 'r'){
+                if(key == 'r'){
                     usr_cmd_.target_mode = int(RobotMotionState::JointDamping);
                 }
                 // usr_cmd_.down_shift = false;
                 // usr_cmd_.up_shift = false;
                 switch(msfb_.current_state) {
                     case RobotMotionState::WaitingForStand:
-                        if(input=='z'){
+                        if(key=='z'){
                             usr_cmd_.target_mode = int(RobotMotionState::StandingUp);
                         }
                     break;
                     case RobotMotionState::StandingUp:
-                        if(input=='c'){
+                        if(key=='c'){
                             usr_cmd_.target_mode = int(RobotMotionState::RLControlMode);
                         }
                     break;
+                    case RobotMotionState::JointDamping:
+                        if(key=='z'){
+                            usr_cmd_.target_mode = int(RobotMotionState::StandingUp);
+                        }
+                    break;
                     case RobotMotionState::RLControlMode:
-                        if(input=='w') {
+                        if(key=='w') {
                             usr_cmd_.forward_vel_scale+=AXIS_STEP;
                             forward_time_record = current_time;
                         }  
-                        else if(input=='s') {
+                        else if(key=='s') {
                             usr_cmd_.forward_vel_scale-=AXIS_STEP;
                             forward_time_record = current_time;
                         }
 
-                        if(input=='a') {
+                        if(key=='a') {
                             usr_cmd_.side_vel_scale+=AXIS_STEP;
                             side_time_record = current_time;
                         }
-                        else if(input=='d') {
+                        else if(key=='d') {
                             usr_cmd_.side_vel_scale-=AXIS_STEP;
                             side_time_record = current_time;
                         }
                         
-                        if(input=='q') {
+                        if(key=='q') {
                             usr_cmd_.turnning_vel_scale+=AXIS_STEP;
                             turnning_time_record = current_time;
                         }
-                        else if(input=='e') {
+                        else if(key=='e') {
                             usr_cmd_.turnning_vel_scale-=AXIS_STEP;
                             turnning_time_record = current_time;
                         }
@@ -146,4 +153,3 @@ public:
     }
 
 };
-

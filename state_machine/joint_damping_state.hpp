@@ -43,10 +43,9 @@ public:
         return false;
     }
     virtual StateName GetNextStateName() {
-        if(run_time_ - time_record_ < 3.){
-            return StateName::kJointDamping;
+        if(uc_ptr_->GetUserCommand().target_mode == int(RobotMotionState::StandingUp)){
+            return StateName::kStandUp;
         }
-        return StateName::kIdle;
+        return StateName::kJointDamping;
     }
 };
-

@@ -258,6 +258,10 @@ if (BUILD_TESTING)
   target_link_libraries(simulation_packet_codec_test simulation_packet_codec)
   add_test(NAME simulation_packet_codec_test COMMAND simulation_packet_codec_test)
 
+  add_executable(simulation_wait_pose_test tests/simulation_wait_pose_test.cpp)
+  target_include_directories(simulation_wait_pose_test PRIVATE state_machine types ${THIRD_PARTY}/eigen/)
+  add_test(NAME simulation_wait_pose_test COMMAND simulation_wait_pose_test)
+
   add_executable(episode_log_test tests/episode_log_test.cpp)
   target_include_directories(episode_log_test PRIVATE logging types ${THIRD_PARTY}/eigen/)
   target_link_libraries(episode_log_test episode_log)

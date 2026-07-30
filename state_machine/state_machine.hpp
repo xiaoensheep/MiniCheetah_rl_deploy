@@ -31,7 +31,7 @@
 #include "hardware/hardware_interface.hpp"
 #include "data_streaming.hpp"
 #ifdef BUILD_SIMULATION
-#include "policy_metadata.h"
+#include "simulation_wait_pose.h"
 #endif
 #include <filesystem>
 
@@ -66,15 +66,9 @@ private:
 
 #ifdef BUILD_SIMULATION
     void ConfigureSimulationStartupCommand() {
-        const PolicyMetadata policy_metadata = LoadPolicyMetadata(ResolvePolicyMetadataPath());
-        const VecXf default_joint_pos = Eigen::Map<const Eigen::VectorXf>(
-            policy_metadata.default_joint_pos.data(), policy_metadata.default_joint_pos.size());
-
-        MatXf startup_cmd = MatXf::Zero(12, 5);
-        startup_cmd.col(0) = cp_ptr_->swing_leg_kp_.replicate(4, 1);
-        startup_cmd.col(1) = default_joint_pos;
-        startup_cmd.col(2) = cp_ptr_->swing_leg_kd_.replicate(4, 1);
-        ri_ptr_->SetJointCommand(startup_cmd);
+        ri_ptr_->SetJointCommand(simulation_wait_pose::BuildMiniCheetahCrouchHoldCommand(
+            cp_ptr_->swing_leg_kp_,
+            cp_ptr_->swing_leg_kd_));
     }
 #endif
 

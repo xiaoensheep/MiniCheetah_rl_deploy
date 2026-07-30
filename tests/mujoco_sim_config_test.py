@@ -7,6 +7,7 @@ from pathlib import Path
 from interface.robot.simulation.mujoco_sim_config import (
     CANONICAL_JOINT_ORDER,
     CROUCH_JOINT_POS,
+    DEFAULT_INITIAL_POSE,
     STARTUP_HOLD_KD,
     STARTUP_HOLD_KP,
     initial_base_height,
@@ -61,6 +62,10 @@ def test_crouch_pose_is_available_for_manual_debugging():
 
         expect(initial_joint_pose("crouch", defaults) == CROUCH_JOINT_POS, "crouch joint pose")
         expect(abs(initial_base_height("crouch", defaults) - 0.10) < 1e-6, "crouch height")
+
+
+def test_default_initial_pose_is_crouch_waiting_pose():
+    expect(DEFAULT_INITIAL_POSE == "crouch", "default initial pose")
 
 
 def test_unknown_pose_is_rejected():
@@ -121,6 +126,7 @@ def test_startup_hold_gains_are_enabled():
 if __name__ == "__main__":
     test_policy_stand_pose_defaults()
     test_crouch_pose_is_available_for_manual_debugging()
+    test_default_initial_pose_is_crouch_waiting_pose()
     test_unknown_pose_is_rejected()
     test_incomplete_metadata_is_rejected()
     test_wrong_joint_order_is_rejected()

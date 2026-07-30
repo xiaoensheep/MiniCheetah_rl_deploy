@@ -30,15 +30,16 @@ python interface/robot/simulation/mujoco_simulation.py
 ./build_mini/rl_deploy
 ```
 
-The MuJoCo backend starts from the policy metadata stand pose by default and
-holds that pose until `rl_deploy` connects. For startup-pose debugging, use
-`--initial-pose crouch`; for headless smoke tests, use `--no-viewer --duration 5`.
+The MuJoCo backend starts from a crouch waiting pose by default and holds that
+pose until you press `z` in the `rl_deploy` terminal. For policy-stand debugging,
+use `--initial-pose stand`; for headless smoke tests, use `--no-viewer --duration 5`.
 Simulation builds use a wider RL entry joint-position tolerance to account for
 MuJoCo contact settling; hardware builds keep the stricter default gate.
 
 Keyboard commands: `z` stand up, wait for `stand up success`, `c` enter RL
-control, `w/s/a/d` linear command, `q/e` yaw command. Run the MuJoCo terminal
-first, then start `rl_deploy` from the repository root.
+control, `r` enter joint damping, `w/s/a/d` linear command, `q/e` yaw command.
+Run the MuJoCo terminal first, then start `rl_deploy` from the repository root.
+After `joint_damping`, the controller stays in damping until you press `z` again.
 
 You can confirm the policy is actually running when the `rl_deploy` terminal
 prints `rl_control`, `[ONNX ENTER]`, `[RL DEBUG] raw_action`, and

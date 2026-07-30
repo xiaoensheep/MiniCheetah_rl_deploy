@@ -13,7 +13,7 @@
 
 #include "state_base.h"
 #ifdef BUILD_SIMULATION
-#include "policy_metadata.h"
+#include "simulation_wait_pose.h"
 #endif
 
 class IdleState : public StateBase{
@@ -24,7 +24,7 @@ private:
     Vec3f rpy_, acc_, omg_;
     double enter_state_time_ = -10000.;
 #ifdef BUILD_SIMULATION
-    VecXf sim_idle_joint_pos_;
+    MatXf sim_idle_command_;
 #endif
 
     float last_print_time = 0;
@@ -101,9 +101,9 @@ public:
     IdleState(const RobotType& robot_type, const std::string& state_name, 
         std::shared_ptr<ControllerData> data_ptr):StateBase(robot_type, state_name, data_ptr){
 #ifdef BUILD_SIMULATION
-            const PolicyMetadata policy_metadata = LoadPolicyMetadata(ResolvePolicyMetadataPath());
-            sim_idle_joint_pos_ = Eigen::Map<const Eigen::VectorXf>(
-                policy_metadata.default_joint_pos.data(), policy_metadata.default_joint_pos.size());
+            sim_idle_command_ = simulation_wait_pose::BuildMiniCheetahCrouchHoldCommand(
+                cp_ptr_->swing_leg_kp_,
+                cp_ptr_->swing_leg_kd_);
 #endif
         }
     ~IdleState(){}
@@ -128,9 +128,7 @@ public:
             }
         MatXf cmd = MatXf::Zero(12, 5);
 #ifdef BUILD_SIMULATION
-        cmd.col(0) = cp_ptr_->swing_leg_kp_.replicate(4, 1);
-        cmd.col(1) = sim_idle_joint_pos_;
-        cmd.col(2) = cp_ptr_->swing_leg_kd_.replicate(4, 1);
+        cmd = sim_idle_command_;
 #endif
         ri_ptr_->SetJointCommand(cmd); // (current torque, not last torque, video content slip of the tongue)
     }
