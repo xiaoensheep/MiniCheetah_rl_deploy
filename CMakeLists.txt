@@ -162,6 +162,13 @@ target_include_directories(simulation_packet_codec PUBLIC
     ${THIRD_PARTY}/eigen/
 )
 
+add_library(episode_log STATIC logging/episode_log.cpp)
+target_include_directories(episode_log PUBLIC
+    logging
+    types
+    ${THIRD_PARTY}/eigen/
+)
+
 # Building the policy runner as a separate library means that editing the
 # policy implementation only recompiles this one translation unit and
 # re-links, without touching the state machine or main.cpp object files.
@@ -243,4 +250,9 @@ if (BUILD_TESTING)
   target_include_directories(simulation_packet_codec_test PRIVATE interface/robot/simulation types ${THIRD_PARTY}/eigen/)
   target_link_libraries(simulation_packet_codec_test simulation_packet_codec)
   add_test(NAME simulation_packet_codec_test COMMAND simulation_packet_codec_test)
+
+  add_executable(episode_log_test tests/episode_log_test.cpp)
+  target_include_directories(episode_log_test PRIVATE logging types ${THIRD_PARTY}/eigen/)
+  target_link_libraries(episode_log_test episode_log)
+  add_test(NAME episode_log_test COMMAND episode_log_test)
 endif()
