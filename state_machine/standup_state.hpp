@@ -22,6 +22,8 @@ private:
     MatXf joint_cmd_;
     PolicyEntryGateConfig policy_entry_gate_config_;
     float stand_duration_ = 2.;
+    PolicyEntryGateReason last_policy_entry_gate_reason_ = PolicyEntryGateReason::kReady;
+    float last_policy_entry_gate_print_time_ = -10000.0f;
 
     void GetRobotJointValue(){
         current_joint_pos_ = ri_ptr_->GetJointPosition();
@@ -83,6 +85,29 @@ private:
         return theta;
     }
 
+    void MaybePrintPolicyEntryGateRefusal(const PolicyEntryGateResult& gate_result) {
+        const bool reason_changed = gate_result.reason != last_policy_entry_gate_reason_;
+        const bool print_interval_elapsed = run_time_ - last_policy_entry_gate_print_time_ > 0.5f;
+        if (!reason_changed && !print_interval_elapsed) {
+            return;
+        }
+
+        float max_joint_error = 0.0f;
+        if (current_joint_pos_.size() == policy_entry_gate_config_.default_joint_pos.size()) {
+            max_joint_error = (current_joint_pos_ - policy_entry_gate_config_.default_joint_pos)
+                                  .cwiseAbs()
+                                  .maxCoeff();
+        }
+
+        std::cout << "[POLICY ENTRY GATE] refused RLControl: "
+                  << PolicyEntryGateReasonToString(gate_result.reason)
+                  << " | max_joint_error: " << max_joint_error
+                  << " | base_height: " << ri_ptr_->GetBaseHeight()
+                  << std::endl;
+        last_policy_entry_gate_reason_ = gate_result.reason;
+        last_policy_entry_gate_print_time_ = run_time_;
+    }
+
 public:
     StandUpState(const RobotType& robot_type, const std::string& state_name, 
         std::shared_ptr<ControllerData> data_ptr):StateBase(robot_type, state_name, data_ptr){
@@ -92,6 +117,10 @@ public:
             policy_entry_gate_config_.default_joint_pos = goal_joint_pos_;
             policy_entry_gate_config_.target_base_height = policy_metadata.target_base_height;
             policy_entry_gate_config_.max_control_dt = 1.5f / policy_metadata.pd_update_frequency_hz;
+#ifdef BUILD_SIMULATION
+            policy_entry_gate_config_.max_joint_pos_error = 0.35f;
+            policy_entry_gate_config_.max_base_height_error = 0.08f;
+#endif
             kp_ = VecXf(12);
             kd_ = VecXf(12);     
             kp_ = cp_ptr_->swing_leg_kp_.replicate(4, 1);
@@ -113,6 +142,8 @@ public:
         RecordJointData();
         previous_run_time_ = run_time_;
         control_dt_ = 0.0f;
+        last_policy_entry_gate_reason_ = PolicyEntryGateReason::kReady;
+        last_policy_entry_gate_print_time_ = -10000.0f;
         StateBase::msfb_.UpdateCurrentState(RobotMotionState::StandingUp);
         uc_ptr_->SetMotionStateFeedback(StateBase::msfb_);
     };
@@ -161,9 +192,7 @@ public:
                     std::cout << "stand up success" << std::endl;
                     return StateName::kRLControl;
                 }
-                std::cout << "[POLICY ENTRY GATE] refused RLControl: "
-                          << PolicyEntryGateReasonToString(gate_result.reason)
-                          << std::endl;
+                MaybePrintPolicyEntryGateRefusal(gate_result);
             }
         }
         return StateName::kStandUp;

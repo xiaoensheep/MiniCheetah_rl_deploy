@@ -13,6 +13,8 @@
 
 #include "robot_interface.h"
 #include "simulation_packet_codec.h"
+#include <cerrno>
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <sys/types.h>
@@ -125,6 +127,13 @@ namespace interface{
                 std::cerr << "Error creating socket" << std::endl;
                 return ;
             }
+            const int reuse_addr = 1;
+            if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse_addr, sizeof(reuse_addr)) < 0) {
+                std::cerr << "Error enabling UDP address reuse on port 30010: "
+                          << std::strerror(errno) << std::endl;
+                close(sockfd);
+                return;
+            }
 
             // 绑定套接字到端口
             struct sockaddr_in serverAddr;
@@ -132,7 +141,9 @@ namespace interface{
             serverAddr.sin_port = htons(30010); // 端口号
             serverAddr.sin_addr.s_addr = INADDR_ANY;
             if (bind(sockfd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
-                std::cerr << "Error binding socket" << std::endl;
+                std::cerr << "Error binding UDP state socket on port 30010: "
+                          << std::strerror(errno) << std::endl;
+                close(sockfd);
                 return ;
             }
 

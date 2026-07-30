@@ -30,6 +30,9 @@
 
 #include "hardware/hardware_interface.hpp"
 #include "data_streaming.hpp"
+#ifdef BUILD_SIMULATION
+#include "policy_metadata.h"
+#endif
 #include <filesystem>
 
 namespace {
@@ -60,6 +63,20 @@ private:
     std::shared_ptr<ControlParameters> cp_ptr_;
 
     std::shared_ptr<DataStreaming> ds_ptr_;
+
+#ifdef BUILD_SIMULATION
+    void ConfigureSimulationStartupCommand() {
+        const PolicyMetadata policy_metadata = LoadPolicyMetadata(ResolvePolicyMetadataPath());
+        const VecXf default_joint_pos = Eigen::Map<const Eigen::VectorXf>(
+            policy_metadata.default_joint_pos.data(), policy_metadata.default_joint_pos.size());
+
+        MatXf startup_cmd = MatXf::Zero(12, 5);
+        startup_cmd.col(0) = cp_ptr_->swing_leg_kp_.replicate(4, 1);
+        startup_cmd.col(1) = default_joint_pos;
+        startup_cmd.col(2) = cp_ptr_->swing_leg_kd_.replicate(4, 1);
+        ri_ptr_->SetJointCommand(startup_cmd);
+    }
+#endif
 
     void GetDataStreaming(){
         if(!ri_ptr_) return;
@@ -161,6 +178,9 @@ public:
         // std::cout << "Controller will be enabled in 3 seconds!!!" << std::endl;
         // std::this_thread::sleep_for(std::chrono::seconds(3)); //for safety 
 
+#ifdef BUILD_SIMULATION
+        ConfigureSimulationStartupCommand();
+#endif
         ri_ptr_->Start();
         std::cout << "Robot interface started" << std::endl;
         uc_ptr_->Start();

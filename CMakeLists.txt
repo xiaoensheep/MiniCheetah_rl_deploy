@@ -6,6 +6,7 @@ set(CMAKE_BUILD_TYPE Release)
 add_definitions(-w) # warning ignore
 add_compile_options(-fPIC)
 include(CTest)
+find_package(Python3 COMPONENTS Interpreter)
 
 # ========== 控制选项 ==========
 set(BUILD_PLATFORM "x86" CACHE STRING "select build cpu type")
@@ -278,4 +279,12 @@ if (BUILD_TESTING)
   add_test(NAME onnx_policy_replay_test COMMAND onnx_policy_replay_test)
   set_tests_properties(onnx_policy_replay_test PROPERTIES
       ENVIRONMENT "LD_LIBRARY_PATH=${ONNX_RUNTIME_ROOT}/lib")
+
+  if(Python3_FOUND)
+    add_test(NAME mujoco_sim_config_test
+        COMMAND ${Python3_EXECUTABLE} ${WORKSPACE_DIR}/tests/mujoco_sim_config_test.py)
+    set_tests_properties(mujoco_sim_config_test PROPERTIES
+        WORKING_DIRECTORY ${WORKSPACE_DIR}
+        ENVIRONMENT "PYTHONPATH=${WORKSPACE_DIR}")
+  endif()
 endif()

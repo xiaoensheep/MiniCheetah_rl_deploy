@@ -3,11 +3,21 @@ import time
 import socket
 import struct
 import threading
+import argparse
 from pathlib import Path
 import numpy as np
 import mujoco
 import mujoco.viewer
 from colorama import init, Fore, Style
+from mujoco_sim_config import (
+    DEFAULT_INITIAL_POSE,
+    STARTUP_HOLD_KD,
+    STARTUP_HOLD_KP,
+    initial_base_height,
+    initial_joint_pose,
+    load_policy_sim_defaults,
+    project_root_from_sim_file,
+)
 
 # Initialize colorama for colored terminal output
 init(autoreset=True)
@@ -21,21 +31,22 @@ USE_VIEWER = True
 DT = 0.001
 RENDER_INTERVAL = 10
 
-URDF_INIT = {
-    "mini_cheetah": np.array([0.0, -1.45, 2.35] * 4, dtype=np.float32)
-}
-
 class MuJoCoSimulation:
     def __init__(self, model_key: str = MODEL_NAME, 
                  xml_relpath: str = XML_PATH,
                  local_port: int = LOCAL_PORT, 
                  ctrl_ip: str = CTRL_IP, 
-                 ctrl_port: int = CTRL_PORT):
+                 ctrl_port: int = CTRL_PORT,
+                 use_viewer: bool = USE_VIEWER,
+                 initial_pose: str = DEFAULT_INITIAL_POSE,
+                 debug_period: float = 2.0,
+                 duration: float = 0.0):
         
         # UDP communication
         self.local_port = local_port
         self.ctrl_addr = (ctrl_ip, ctrl_port)
         self.recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.recv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.recv_sock.bind(("0.0.0.0", local_port))
         self.send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -48,6 +59,11 @@ class MuJoCoSimulation:
         self.model = mujoco.MjModel.from_xml_path(xml_full)
         self.model.opt.timestep = DT
         self.data = mujoco.MjData(self.model)
+        self.project_root = project_root_from_sim_file(__file__)
+        self.policy_defaults = load_policy_sim_defaults(self.project_root)
+        self.initial_pose = initial_pose
+        self.debug_period = debug_period
+        self.duration = duration
 
         # Robot DOF list
         self.actuator_ids = [a for a in range(self.model.nu)]  # 0..11
@@ -57,9 +73,10 @@ class MuJoCoSimulation:
         self._set_initial_pose(model_key)
 
         # Buffers
-        self.kp_cmd = np.zeros((self.dof_num, 1), np.float32)
+        self.kp_cmd = np.full((self.dof_num, 1), STARTUP_HOLD_KP, np.float32)
         self.kd_cmd = np.zeros_like(self.kp_cmd)
-        self.pos_cmd = np.zeros_like(self.kp_cmd)
+        self.kd_cmd.fill(STARTUP_HOLD_KD)
+        self.pos_cmd = self.data.qpos[7:7+self.dof_num].astype(np.float32).reshape(self.dof_num, 1)
         self.vel_cmd = np.zeros_like(self.kp_cmd)
         self.tau_ff = np.zeros_like(self.kp_cmd)
         self.input_tq = np.zeros_like(self.kp_cmd)
@@ -69,20 +86,26 @@ class MuJoCoSimulation:
         self.body_acc = np.zeros(3, dtype=np.float32)
         self.timestamp = 0.0
         self.last_print_time = 0  # Track last print time
+        self.command_packet_count = 0
+        self.last_command_time = None
 
         print(f"[INFO] MuJoCo model loaded, dof = {self.dof_num}")
+        print(f"[INFO] Initial pose: {self.initial_pose}")
 
         # Visualization
         self.viewer = None
-        if USE_VIEWER:
+        if use_viewer:
             self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
 
     def _set_initial_pose(self, key: str):
         """Set joint positions to the Mini Cheetah simulation default pose."""
         qpos0 = self.data.qpos.copy()
-        qpos0[2] = 0.10
+        qpos0[2] = initial_base_height(self.initial_pose, self.policy_defaults)
         qpos0[3:7] = np.array([1.0, 0.0, 0.0, 0.0])
-        qpos0[7:7+self.dof_num] = URDF_INIT[key]
+        qpos0[7:7+self.dof_num] = np.array(
+            initial_joint_pose(self.initial_pose, self.policy_defaults),
+            dtype=np.float32,
+        )
         self.data.qpos[:] = qpos0
         mujoco.mj_forward(self.model, self.data)
 
@@ -122,6 +145,7 @@ class MuJoCoSimulation:
         print(f"{Fore.MAGENTA}[Joint Cmd] Kd Term   :{Style.RESET_ALL} {format_array(self.kd_cmd.T.flatten())}")
         print(f"{Fore.MAGENTA}[Joint Cmd] FF Tau    :{Style.RESET_ALL} {format_array(self.tau_ff.T.flatten())}")
         print(f"{Fore.MAGENTA}[Joint Cmd] Final Torq:{Style.RESET_ALL} {format_array(self.input_tq.T.flatten())}")
+        print(f"{Fore.BLUE}[UDP] Cmd Packets:{Style.RESET_ALL} {self.command_packet_count}")
         print(f"{Fore.CYAN}==================={Style.RESET_ALL}")
 
     def start(self):
@@ -146,6 +170,9 @@ class MuJoCoSimulation:
                 self._update_body_acc(prev_base_linvel)
 
                 self.timestamp = step * DT
+                if self.duration > 0.0 and self.timestamp >= self.duration:
+                    print(f"[INFO] Simulation duration reached: {self.duration:.3f}s")
+                    break
 
                 # 采样 & 发送观测
                 self._send_robot_state(step)
@@ -155,7 +182,7 @@ class MuJoCoSimulation:
                     
                 # Print at 0.5 Hz (every 2 seconds)
                 current_time = time.perf_counter()
-                if current_time - self.last_print_time >= 2.0:
+                if self.debug_period > 0.0 and current_time - self.last_print_time >= self.debug_period:
                     self.print_debug_info()
                     self.last_print_time = current_time
                     
@@ -180,6 +207,8 @@ class MuJoCoSimulation:
             self.vel_cmd = np.asarray(unpacked[self.dof_num * 3:self.dof_num * 4], dtype=np.float32).reshape(
                 self.dof_num, 1)
             self.tau_ff = np.asarray(unpacked[self.dof_num * 4:], dtype=np.float32).reshape(self.dof_num, 1)
+            self.command_packet_count += 1
+            self.last_command_time = time.perf_counter()
 
     def _apply_joint_torque(self):
         # Current joint states
@@ -263,5 +292,22 @@ class MuJoCoSimulation:
 
 
 if __name__ == "__main__":
-    sim = MuJoCoSimulation()
+    parser = argparse.ArgumentParser(description="Mini Cheetah MuJoCo UDP sim2sim backend")
+    parser.add_argument(
+        "--initial-pose",
+        choices=("stand", "crouch"),
+        default=os.environ.get("MINI_CHEETAH_SIM_INITIAL_POSE", DEFAULT_INITIAL_POSE),
+        help="Initial pose for sim2sim. 'stand' starts from the policy metadata default pose.",
+    )
+    parser.add_argument("--no-viewer", action="store_true", help="Run headless without launching the MuJoCo viewer")
+    parser.add_argument("--duration", type=float, default=0.0, help="Stop after this many simulated seconds")
+    parser.add_argument("--debug-period", type=float, default=2.0, help="Seconds between debug prints; <=0 disables")
+    args = parser.parse_args()
+
+    sim = MuJoCoSimulation(
+        use_viewer=not args.no_viewer,
+        initial_pose=args.initial_pose,
+        debug_period=args.debug_period,
+        duration=args.duration,
+    )
     sim.start()

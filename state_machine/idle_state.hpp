@@ -12,6 +12,9 @@
 
 
 #include "state_base.h"
+#ifdef BUILD_SIMULATION
+#include "policy_metadata.h"
+#endif
 
 class IdleState : public StateBase{
 private:
@@ -20,6 +23,9 @@ private:
     VecXf joint_pos_, joint_vel_, joint_tau_;
     Vec3f rpy_, acc_, omg_;
     double enter_state_time_ = -10000.;
+#ifdef BUILD_SIMULATION
+    VecXf sim_idle_joint_pos_;
+#endif
 
     float last_print_time = 0;
     void GetProprioceptiveData(){
@@ -94,6 +100,11 @@ private:
 public:
     IdleState(const RobotType& robot_type, const std::string& state_name, 
         std::shared_ptr<ControllerData> data_ptr):StateBase(robot_type, state_name, data_ptr){
+#ifdef BUILD_SIMULATION
+            const PolicyMetadata policy_metadata = LoadPolicyMetadata(ResolvePolicyMetadataPath());
+            sim_idle_joint_pos_ = Eigen::Map<const Eigen::VectorXf>(
+                policy_metadata.default_joint_pos.data(), policy_metadata.default_joint_pos.size());
+#endif
         }
     ~IdleState(){}
 
@@ -116,6 +127,11 @@ public:
                 last_print_time = ri_ptr_->GetInterfaceTimeStamp();
             }
         MatXf cmd = MatXf::Zero(12, 5);
+#ifdef BUILD_SIMULATION
+        cmd.col(0) = cp_ptr_->swing_leg_kp_.replicate(4, 1);
+        cmd.col(1) = sim_idle_joint_pos_;
+        cmd.col(2) = cp_ptr_->swing_leg_kd_.replicate(4, 1);
+#endif
         ri_ptr_->SetJointCommand(cmd); // (current torque, not last torque, video content slip of the tongue)
     }
 

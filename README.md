@@ -23,15 +23,28 @@ Use two terminals:
 
 ```bash
 conda activate mujoco
-cd interface/robot/simulation
-python mujoco_simulation.py
+python interface/robot/simulation/mujoco_simulation.py
 ```
 
 ```bash
 ./build_mini/rl_deploy
 ```
 
-Keyboard commands: `z` stand up, `c` enter RL control, `wasd` linear command, `q/e` yaw command.
+The MuJoCo backend starts from the policy metadata stand pose by default and
+holds that pose until `rl_deploy` connects. For startup-pose debugging, use
+`--initial-pose crouch`; for headless smoke tests, use `--no-viewer --duration 5`.
+Simulation builds use a wider RL entry joint-position tolerance to account for
+MuJoCo contact settling; hardware builds keep the stricter default gate.
+
+Keyboard commands: `z` stand up, wait for `stand up success`, `c` enter RL
+control, `w/s/a/d` linear command, `q/e` yaw command. Run the MuJoCo terminal
+first, then start `rl_deploy` from the repository root.
+
+You can confirm the policy is actually running when the `rl_deploy` terminal
+prints `rl_control`, `[ONNX ENTER]`, `[RL DEBUG] raw_action`, and
+`[RL DEBUG] target_joint_pos`. The MuJoCo terminal should show changing
+`Target Pos` values after RL entry, and the episode log should contain
+`state_machine_state":"rl_control"` records.
 
 When RL control is entered in simulation builds, structured episode logs are written to
 `logs/sim_episode_*.jsonl`. Override the path with
